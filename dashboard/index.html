@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transit Safety AI Command Center | UN SDG 5 Emergency Monitoring</title>
+    <meta name="description" content="Real-time AI-Powered IoT Edge & Cloud Command Dashboard for Public Transport Safety, featuring acoustic SOS detection, YOLOv8 crowd monitoring, and automated police georouting.">
+    
+    <!-- Modern Typography: Google Fonts (Outfit & Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Iconography CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Leaflet.js GIS Mapping CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
+    <!-- Custom Premium Styling System -->
+    <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body class="theme-dark">
+    <!-- Automated SOS Strobe Override Layer -->
+    <div id="strobe-overlay" class="strobe-hidden" aria-hidden="true"></div>
+
+    <!-- Main Administrative Layout -->
+    <div class="app-container">
+        <!-- Navigation Header -->
+        <header class="command-header">
+            <div class="header-brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                    <h1>Transit Safety Command Center</h1>
+                    <p class="subtitle">AI/IoT Autonomous Public Transport Surveillance Network</p>
+                </div>
+            </div>
+            
+            <div class="header-badges">
+                <span class="badge sdg-badge" title="Aligned with United Nations Sustainable Development Goal 5">
+                    <i class="fa-solid fa-person-dress"></i> UN SDG 5: Women Safety & Security
+                </span>
+                <span id="cloud-connection-status" class="badge status-connected">
+                    <span class="pulse-dot"></span> Cloud WebSocket: CONNECTED
+                </span>
+                <div class="clock-widget">
+                    <i class="fa-regular fa-clock"></i>
+                    <span id="live-system-clock">00:00:00 UTC</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Academic Presentation Interactive Demo Controls -->
+        <section class="demo-controller-bar" aria-label="Simulation Command Toolbar">
+            <span class="control-label"><i class="fa-solid fa-gamepad"></i> Demo Evaluation Controls:</span>
+            <div class="button-group">
+                <button id="btn-simulate-sos" class="btn btn-danger" type="button">
+                    <i class="fa-solid fa-bullhorn"></i> Trigger Acoustic SOS ("Bachao!")
+                </button>
+                <button id="btn-simulate-crowd" class="btn btn-warning" type="button">
+                    <i class="fa-solid fa-users"></i> Trigger Overcrowding Anomaly
+                </button>
+                <button id="btn-reset-normal" class="btn btn-success" type="button">
+                    <i class="fa-solid fa-shield-heart"></i> Reset Normal Transit State
+                </button>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Content Grid -->
+        <main class="command-grid">
+            <!-- Left & Center: GIS Map Tracking & Telemetry Hub -->
+            <section class="gis-section card-glass">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-map-location-dot"></i> Live Vehicular Tracking & Responder Georouting</h2>
+                    <span id="active-vehicle-label" class="vehicle-tag">Vehicle ID: <strong>BUS-104-DL01</strong></span>
+                </div>
+                <div class="map-wrapper">
+                    <div id="gis-map" class="map-viewport"></div>
+                    <div class="map-legend">
+                        <span><i class="fa-solid fa-bus text-primary"></i> Active Transit Vehicle</span>
+                        <span><i class="fa-solid fa-building-shield text-info"></i> Mapped Police Station</span>
+                        <span><i class="fa-solid fa-route text-danger"></i> Emergency Routing Line</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right: Real-time Sensors & Telemetry Statistics -->
+            <aside class="telemetry-aside">
+                <!-- Vehicle Navigation State Card -->
+                <div class="card-glass metric-card">
+                    <h3><i class="fa-solid fa-location-arrow"></i> Navigation Telemetry</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-value" id="telemetry-speed">35.0</span>
+                            <span class="metric-unit">km/h Speed</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-value" id="telemetry-heading">124°</span>
+                            <span class="metric-unit">Compass Heading</span>
+                        </div>
+                    </div>
+                    <div class="location-detail">
+                        <span class="detail-label"><i class="fa-solid fa-map-pin text-accent"></i> Current Landmark:</span>
+                        <strong id="telemetry-stop">Connaught Place Central Bus Terminus</strong>
+                    </div>
+                    <div class="coordinates-raw">
+                        <small id="telemetry-coords">Lat: 28.613900 | Lng: 77.209000</small>
+                    </div>
+                </div>
+
+                <!-- YOLOv8 Cabin Passenger Load Card -->
+                <div class="card-glass metric-card">
+                    <div class="card-header-flex">
+                        <h3><i class="fa-solid fa-camera-retro"></i> YOLOv8 Vision Density</h3>
+                        <span id="vision-hardware-badge" class="badge-mini status-online">CAMERA ONLINE</span>
+                    </div>
+                    <div class="pax-counter-display">
+                        <div class="pax-circle" id="pax-indicator-ring">
+                            <span class="pax-count" id="telemetry-pax">2</span>
+                            <span class="pax-label">Persons Detected</span>
+                        </div>
+                        <div class="pax-status-text">
+                            <strong id="pax-status-title" class="text-safe">SAFE OPERATING LOAD</strong>
+                            <p id="pax-status-desc">Cabin occupancy within normal geometric ventilation margins (< 5 passengers).</p>
+                        </div>
+                    </div>
+                    <!-- Capacity Bar -->
+                    <div class="progress-bar-container">
+                        <div id="pax-progress-bar" class="progress-fill progress-safe" style="width: 25%;"></div>
+                    </div>
+                </div>
+
+                <!-- Acoustic Speech Listener Status Card -->
+                <div class="card-glass metric-card">
+                    <div class="card-header-flex">
+                        <h3><i class="fa-solid fa-microphone-lines"></i> Acoustic SOS Recognition</h3>
+                        <span class="badge-mini status-online">MIC STREAM ACTIVE</span>
+                    </div>
+                    <div class="audio-waveform-visual">
+                        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                    </div>
+                    <p class="audio-instruction">Continuous real-time speech scanning active for keywords: <code class="kw-tag">"Bachao"</code> <code class="kw-tag">"Help"</code></p>
+                </div>
+
+                <!-- Real-time Event Dispatch Feed -->
+                <div class="card-glass logs-card">
+                    <h3><i class="fa-solid fa-satellite-dish"></i> Live Security Dispatch Log</h3>
+                    <div id="dispatch-logs-container" class="logs-viewport" role="log" aria-live="polite">
+                        <div class="log-entry log-info">
+                            <span class="log-time">[System Init]</span>
+                            <span class="log-msg">Command Center initialized. WebSocket subscribed to Firebase Cloud RTDB.</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="command-footer">
+            <p>&copy; 2026 Engineering Minor Project Defense | Aligned with United Nations SDG Goal 5 (Target 5.2) | Built with Python, OpenCV, YOLOv8 & Vanilla JS</p>
+        </footer>
+    </div>
+
+    <!-- Level-1 Critical SOS Emergency Override Modal -->
+    <dialog id="emergency-modal" class="modal-glass" aria-labelledby="modal-title">
+        <div class="modal-content">
+            <div class="modal-icon pulse-alarm">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h2 id="modal-title" class="alarm-header">CRITICAL EMERGENCY DETECTED!</h2>
+            <div class="alarm-details">
+                <p><strong>Incident Trigger:</strong> <span id="modal-incident-type">Acoustic Keyword ("Bachao") Spoken</span></p>
+                <p><strong>Affected Vehicle:</strong> BUS-104-DL01 (Route 412 Metro Link)</p>
+                <p><strong>Nearest Landmark:</strong> <span id="modal-location">Connaught Place Hub</span></p>
+                <p><strong>Automated Action:</strong> Vehicle halted. High-priority SMS/Telegram alerts transmitted. Automated rescue georouting calculated to nearest Police Station.</p>
+            </div>
+            <div class="siren-indicator">
+                <i class="fa-solid fa-volume-high shake-icon"></i> High-Decibel Alarm Looping...
+            </div>
+            <div class="modal-actions">
+                <button id="btn-acknowledge-alert" class="btn btn-acknowledge" type="button">
+                    <i class="fa-solid fa-bell-slash"></i> ACKNOWLEDGE ALERT & DISPATCH RESCUE
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Third-Party Library Bindings CDN -->
+    <!-- Leaflet.js Mapping -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Firebase Realtime DB (V8 Compat via CDN for frictionless browser execution without Webpack/Vite build) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    
+    <!-- Custom Vanilla JavaScript Application Logic -->
+    <script src="./assets/js/alert-handler.js"></script>
+    <script src="./assets/js/map-controller.js"></script>
+    <script src="./assets/js/firebase-app.js"></script>
+</body>
+</html>

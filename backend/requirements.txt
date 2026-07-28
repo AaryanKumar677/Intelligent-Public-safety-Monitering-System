@@ -1,0 +1,28 @@
+# =====================================================================
+# Intelligent Public Transport Safety Monitoring System
+# Production Dependencies Manifest (Python 3.10+)
+# Aligned with United Nations SDG Goal 5 (Women Safety & Security)
+# =====================================================================
+# Installation: pip install -r requirements.txt
+# =====================================================================
+
+# 1. Computer Vision & YOLOv8 Machine Learning Architecture
+# Required for edge optical surveillance and crowd density threshold evaluation
+opencv-python>=4.8.0.74
+ultralytics>=8.0.0
+numpy>=1.23.0
+
+# 2. Acoustic PCM Streaming & Natural Language Processing
+# Required for real-time speech stream extraction and keyword recognition
+# Confirmed Engine: Google Web Speech API (via SpeechRecognition) + PyAudio Driver
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.13
+
+# 3. Cloud Database Pipeline & Resilient Synchronization
+# Required for connecting to Google Firebase Realtime Database (RTDB)
+firebase-admin>=6.2.0
+
+# 4. Networking Webhooks & Secrets Configuration
+# Required for .env parsing and automated Telegram Bot API dispatch notifications
+python-dotenv>=1.0.0
+requests>=2.31.0

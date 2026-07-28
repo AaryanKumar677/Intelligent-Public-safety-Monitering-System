@@ -1,0 +1,60 @@
+# =====================================================================
+# Intelligent Public Transport Safety Monitoring System - .gitignore
+# =====================================================================
+
+# Environment variables & Sensitive Credentials (CRITICAL)
+.env
+.env.local
+.env.*.local
+credentials/*.json
+!credentials/.gitkeep
+firebase_service_account*.json
+
+# Byte-compiled / Optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Python Virtual Environments
+venv/
+env/
+.env/
+ENV/
+.venv/
+
+# AI Model Weights & Cache (Downloaded YOLO models can be large)
+*.pt
+*.onnx
+weights/
+runs/
+.cache/
+
+# Distribution / Packaging / Install logs
+dist/
+build/
+*.egg-info/
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Editor / IDE / OS generated files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing & Coverage reports
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Node / Frontend development builds (if using bundlers)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
