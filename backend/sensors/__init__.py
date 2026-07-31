@@ -1,6 +1,6 @@
 """
-Sensor modules for edge device simulation.
-Includes SpeechRecognition keyword listening, OpenCV/YOLOv8 crowd counting, and GPS coordinate emulation.
+Sensor suites package for Edge AI vehicular monitoring nodes.
+Exports acoustic keyword detection, YOLOv8 vision machine learning, and GPS route telemetry simulation engines.
 """
 
 from .sos_audio_listener import AudioSOSListener

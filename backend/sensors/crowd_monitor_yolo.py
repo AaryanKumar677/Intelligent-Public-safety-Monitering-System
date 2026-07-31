@@ -1,13 +1,15 @@
 """
 Computer Vision Anomaly & Overcrowding Detection Engine.
-Utilizes OpenCV for real-time optical frame extraction from webcam input
-and YOLOv8 (Nano) deep learning model for rapid person detection and counting.
+Utilizes OpenCV for optical frame extraction from default webcam interface (Index 0)
+and Ultralytics YOLOv8 Nano deep learning neural model for real-time person counting.
+Includes temporal hysteresis filtering and evaluation simulation triggers.
 """
 
 import time
 import logging
 from pathlib import Path
-from typing import Optional, Callable, Tuple, Any, Dict
+from typing import Optional, Callable, Dict, Any
+
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -18,8 +20,8 @@ logger = logging.getLogger("YOLOCrowdMonitor")
 
 class YOLOCrowdMonitor:
     """
-    Real-time vision monitoring node. Evaluates cabin passenger density
-    and raises automated alarms if geometric capacity threshold is violated.
+    Real-time machine vision monitoring edge node. Evaluates passenger density inside
+    transit cabin and invokes automated alarm protocols upon exceeding geometry thresholds.
     """
 
     def __init__(
@@ -39,157 +41,197 @@ class YOLOCrowdMonitor:
         self.model: Optional[YOLO] = None
         self.capture: Optional[cv2.VideoCapture] = None
         
-        # State tracking
+        # Internal state & time-hysteresis evaluation registers
         self.current_passenger_count = 0
         self.is_overcrowded = False
         self._overcrowd_start_time: Optional[float] = None
         self.total_frames_processed = 0
         self._running = False
+        self._simulated_override_count: Optional[int] = None
+        self._hardware_online = False
 
     def load_model(self) -> bool:
-        """Initializes neural network weights into RAM/VRAM."""
+        """Initializes Ultralytics YOLOv8 neural network weights into system RAM/VRAM."""
         try:
-            logger.info(f"Loading YOLOv8 neural model from '{self.model_path}'...")
+            logger.info(f"🧠 Loading YOLOv8 architecture weights from '{self.model_path}'...")
             self.model = YOLO(self.model_path)
-            logger.info("YOLOv8 Object Recognition Engine initialized successfully.")
+            logger.info("✅ YOLOv8 Deep Learning Recognition Engine loaded successfully.")
             return True
-        except Exception as err:
-            logger.error(f"Failed loading YOLOv8 model weights: {err}")
+        except Exception as exc:
+            logger.error(f"Failed to load YOLO model weights ('{self.model_path}'): {exc}")
             return False
 
     def initialize_camera(self) -> bool:
-        """Opens optical interface connection via OpenCV VideoCapture."""
+        """Opens video capture channel on confirmed hardware interface device Index 0."""
+        logger.info(f"📹 Mounting Video Surveillance channel on Hardware Index [{self.camera_index}]...")
         try:
             self.capture = cv2.VideoCapture(self.camera_index)
             if not self.capture.isOpened():
                 logger.warning(
-                    f"⚠️ Webcam input index {self.camera_index} could not be accessed.\n"
-                    "    -> Vision Monitor will allow testing via simulated or static image input."
+                    f"[!] Could not acquire physical video stream on Index [{self.camera_index}].\n"
+                    "    -> Initializing optical surveillance in MOCK SIMULATION MODE.\n"
+                    "    -> You can simulate overcrowding spikes during academic defense by typing 'crowd' in terminal!"
                 )
+                self._hardware_online = False
+                self._running = True
                 return False
-            logger.info(f"📹 Webcam optical interface successfully bounded to index {self.camera_index}.")
+            
+            # Request 720p HD frame resolution if supported by peripheral
+            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            
+            self._hardware_online = True
+            self._running = True
+            logger.info("✅ Optical Video Capture pipeline established successfully.")
             return True
-        except Exception as exc:
-            logger.error(f"Error accessing optical device hardware: {exc}")
+        except Exception as err:
+            logger.error(f"Hardware camera initialization fault: {err}")
+            self._hardware_online = False
+            self._running = True
             return False
 
-    def analyze_frame(self, frame: np.ndarray) -> Tuple[int, np.ndarray, bool]:
+    def _evaluate_hysteresis_alarm(self, detected_count: int, now_time: float) -> None:
         """
-        Executes inference on a single image array.
-        Returns: (person_count, annotated_frame, status_changed_flag)
+        Executes temporal hysteresis evaluation. Overcrowded conditions must persist continuously
+        for >= CROWD_HYSTERESIS_SEC (default 2.0s) to prevent false positives from transient shadow flickers.
         """
-        if self.model is None:
-            if not self.load_model():
-                return 0, frame, False
+        if detected_count > self.threshold_count:
+            if self._overcrowd_start_time is None:
+                self._overcrowd_start_time = now_time
+                logger.debug(f"Density threshold exceeded ({detected_count} > {self.threshold_count}). Hysteresis timer started...")
+            elif (now_time - self._overcrowd_start_time) >= self.hysteresis_sec:
+                if not self.is_overcrowded:
+                    self.is_overcrowded = True
+                    logger.warning(
+                        f"📊 [HYSTERESIS TRIGGERED] Overcrowding sustained for >= {self.hysteresis_sec}s! "
+                        f"Confirmed Passenger Density: {detected_count}"
+                    )
+                    if self.on_anomaly_callback:
+                        self.on_anomaly_callback(detected_count, True)
+        else:
+            if self._overcrowd_start_time is not None:
+                logger.debug(f"Passenger density dropped back to safe zone ({detected_count}). Hysteresis reset.")
+                self._overcrowd_start_time = None
+            if self.is_overcrowded:
+                self.is_overcrowded = False
+                logger.info(f"🟢 [SAFE STATE RESTORED] Cabin load normalized ({detected_count} persons).")
+                if self.on_anomaly_callback:
+                    self.on_anomaly_callback(detected_count, False)
 
-        # Run inference filtering exclusively for COCO class 0 (Person)
-        results = self.model.predict(
-            source=frame,
-            classes=[settings.VISION_PERSON_CLASS_ID],
-            conf=settings.VISION_CONFIDENCE_THRESHOLD,
-            verbose=False
-        )
-
-        annotated_frame = results[0].plot()
-        detected_persons = 0
-
-        # Count filtered detection boxes
-        boxes = results[0].boxes
-        if boxes is not None:
-            detected_persons = len(boxes)
-
-        self.current_passenger_count = detected_persons
-        status_changed = self._evaluate_hysteresis_threshold(detected_persons)
-        
-        # Draw dynamic telemetry HUD overlay directly onto visual output
-        hud_color = (0, 0, 255) if self.is_overcrowded else (0, 220, 0)
-        hud_text = f"CABIN LOAD: {detected_persons}/{self.threshold_count} [{'OVERCROWDED ALARM' if self.is_overcrowded else 'SAFE'}]"
-        cv2.putText(annotated_frame, hud_text, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.75, hud_color, 2, cv2.LINE_AA)
-
-        self.total_frames_processed += 1
-        return detected_persons, annotated_frame, status_changed
-
-    def _evaluate_hysteresis_threshold(self, detected_persons: int) -> bool:
+    def process_single_step(self, show_preview_window: bool = True) -> Dict[str, Any]:
         """
-        Applies time hysteresis to prevent fleeting false positives (e.g., passing pedestrians outside window)
-        from immediately firing crowding alarms.
+        Executes a single optical inference step: captures video frame, evaluates person bounding boxes,
+        computes capacity HUD graphics, and triggers hysteresis alarms.
         """
         now = time.time()
-        previous_state = self.is_overcrowded
 
-        if detected_persons > self.threshold_count:
-            if self._overcrowd_start_time is None:
-                self._overcrowd_start_time = now
-            elif (now - self._overcrowd_start_time) >= self.hysteresis_sec:
-                self.is_overcrowded = True
-        else:
-            self._overcrowd_start_time = None
-            self.is_overcrowded = False
+        # 1. Handle Simulated Override Mode during defense evaluations
+        if self._simulated_override_count is not None:
+            pax_count = self._simulated_override_count
+            self.current_passenger_count = pax_count
+            self._evaluate_hysteresis_alarm(pax_count, now)
+            return {
+                "passenger_count": pax_count,
+                "overcrowded": self.is_overcrowded,
+                "hardware_online": self._hardware_online,
+                "timestamp": int(now)
+            }
 
-        state_changed = (previous_state != self.is_overcrowded)
-        if state_changed:
-            if self.is_overcrowded:
-                logger.warning(f"🚨 [ANOMALY DETECTED] Overcrowding threshold exceeded! Count: {detected_persons} passengers.")
-            else:
-                logger.info(f"✅ [ANOMALY RESOLVED] Cabin passenger density returned to safe operating margin ({detected_persons} passengers).")
-            
-            if self.on_anomaly_callback:
-                try:
-                    self.on_anomaly_callback(detected_persons, self.is_overcrowded)
-                except Exception as err:
-                    logger.error(f"Error executing visual anomaly callback: {err}")
+        # 2. Handle Mock hardware absence
+        if not self._hardware_online or self.capture is None or not self.capture.isOpened():
+            # Default to baseline simulated cabin count of 2 safe passengers
+            pax_count = 2
+            self.current_passenger_count = pax_count
+            self._evaluate_hysteresis_alarm(pax_count, now)
+            return {
+                "passenger_count": pax_count,
+                "overcrowded": False,
+                "hardware_online": False,
+                "timestamp": int(now)
+            }
 
-        return state_changed
-
-    def process_single_step(self, show_preview_window: bool = False) -> Dict[str, Any]:
-        """
-        Captures one live frame from webcam, executes evaluation, and returns structured telemetry metric.
-        Ideal for synchronous polling inside multithreaded orchestrator loops.
-        """
-        if not self.capture or not self.capture.isOpened():
-            # If camera isn't plugged in, return simulated stable state
+        # 3. Perform live neural vision inference on physical video stream
+        ret, frame = self.capture.read()
+        if not ret or frame is None:
+            logger.warning("Dropped optical video frame. Retaining previous density evaluation.")
             return {
                 "passenger_count": self.current_passenger_count,
                 "overcrowded": self.is_overcrowded,
-                "hardware_online": False
+                "hardware_online": self._hardware_online,
+                "timestamp": int(now)
             }
 
-        success, frame = self.capture.read()
-        if not success or frame is None:
-            logger.error("Failed extracting optical stream frame from webcam hardware.")
-            return {
-                "passenger_count": self.current_passenger_count,
-                "overcrowded": self.is_overcrowded,
-                "hardware_online": False
-            }
+        self.total_frames_processed += 1
+        pax_count = 0
 
-        count, annotated, changed = self.analyze_frame(frame)
+        # Run YOLOv8 rapid tensor prediction
+        if self.model:
+            results = self.model.predict(
+                source=frame,
+                conf=settings.VISION_CONFIDENCE_THRESHOLD,
+                classes=[settings.VISION_PERSON_CLASS_ID],  # Strictly restrict detection to standard COCO Class 0 ('person')
+                verbose=False
+            )
 
+            # Draw visual bounding box silhouettes and tally passenger instances
+            if len(results) > 0 and results[0].boxes is not None:
+                boxes = results[0].boxes
+                pax_count = len(boxes)
+                frame = results[0].plot()
+
+        self.current_passenger_count = pax_count
+        self._evaluate_hysteresis_alarm(pax_count, now)
+
+        # 4. Render Head-Up Display (HUD) diagnostics across live OpenCV presentation video window
         if show_preview_window:
-            cv2.imshow(f"AI IoT Vehicle Optical Surveillance - [{settings.VEHICLE_ID}]", annotated)
-            cv2.waitKey(1)  # Minimal refresh latency
+            status_text = "STATUS: SAFE CABIN LOAD" if not self.is_overcrowded else "WARNING: OVERCROWDED HAZARD!"
+            status_color = (0, 217, 126) if not self.is_overcrowded else (45, 58, 255) # BGR Format
+            
+            # Draw semi-transparent HUD header backdrop
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0, 0), (frame.shape[1], 70), (10, 15, 26), -1)
+            cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+
+            # Embed real-time text overlay metrics
+            cv2.putText(frame, f"AI SURVEILLANCE: {status_text}", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+            cv2.putText(frame, f"PASSENGER DENSITY: {pax_count} (Limit: {self.threshold_count}) | FPS Eval: Active", (20, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (240, 244, 248), 1)
+
+            try:
+                cv2.imshow("Intelligent Public Transport Safety - Live YOLOv8 Surveillance", frame)
+                cv2.waitKey(1)
+            except Exception as cv_err:
+                logger.debug(f"OpenCV GUI display context error (possibly headless shell): {cv_err}")
 
         return {
-            "passenger_count": count,
+            "passenger_count": pax_count,
             "overcrowded": self.is_overcrowded,
             "hardware_online": True,
-            "status_changed": changed
+            "timestamp": int(now)
         }
 
     def simulate_crowd_spike(self, simulated_count: int = 8) -> None:
-        """
-        Manual simulation trigger allowing demonstration of overcrowding alarms without needing a crowded room.
-        """
-        logger.info(f"🤖 Manual crowd spike simulation executed with simulated count: {simulated_count} passengers.")
+        """Academic evaluation utility to simulate crowd density spikes directly from terminal command prompt."""
+        logger.warning(f"👥 [EVALUATION SIMULATION] Overriding vision count to {simulated_count} persons (Threshold: {self.threshold_count}).")
+        self._simulated_override_count = simulated_count
+        now = time.time()
         self.current_passenger_count = simulated_count
-        self._overcrowd_start_time = time.time() - (self.hysteresis_sec + 0.5)  # Expire hysteresis timer instantly
-        self._evaluate_hysteresis_threshold(simulated_count)
+        # Force instantaneous hysteresis test
+        self._overcrowd_start_time = now - (self.hysteresis_sec + 0.5)
+        self._evaluate_hysteresis_alarm(simulated_count, now)
+
+    def clear_simulated_override(self) -> None:
+        """Restores physical hardware inference mode."""
+        logger.info("🟢 Clearing simulated crowd override. Reverting to physical machine vision sensor input.")
+        self._simulated_override_count = None
 
     def release(self) -> None:
-        """Terminates optical hardware bindings and dismisses UI windows."""
-        logger.info("Releasing webcam optical handles...")
+        """Releases physical webcam peripheral locks and destroys UI windows."""
+        logger.info("Releasing optical machine vision peripheral interfaces...")
         self._running = False
         if self.capture and self.capture.isOpened():
             self.capture.release()
-        cv2.destroyAllWindows()
-        logger.info("Vision engine shut down completed.")
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
+        logger.info("Vision engine terminated cleanly.")

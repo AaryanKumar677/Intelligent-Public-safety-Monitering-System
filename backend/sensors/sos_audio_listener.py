@@ -1,169 +1,148 @@
 """
-Acoustic SOS Detection Engine using SpeechRecognition & PyAudio.
-Continuously captures live PCM audio streams from microphone hardware,
-transcribes phonemes in real-time, and matches critical safety keywords ("Bachao", "Help").
+Acoustic SOS Keyword Recognition Engine.
+Leverages Google Web Speech API (via SpeechRecognition) and PyAudio to continuously scan
+microphone input streams for vocalized distress expressions ('Bachao', 'Help', 'Emergency')
+with automated ambient noise calibration and debounce cooldowns.
+Confirmed Hardware Interface: Primary Laptop Microphone (Index 0).
 """
 
 import time
 import logging
 import threading
 from typing import Callable, Optional, Set
-import speech_recognition as sr
 
+import speech_recognition as sr
 from backend.config import settings
 
 logger = logging.getLogger("AudioSOSListener")
 
 class AudioSOSListener:
     """
-    Continuous real-time acoustic distress keyword listener.
-    Runs asynchronously in a background thread to prevent blocking edge vision processing.
+    Asynchronous audio monitoring edge node that captures PCM audio streams via Index 0,
+    transcribes phonetics via Google Web Speech API, and triggers SOS events on keyword match.
     """
 
     def __init__(
         self,
+        device_index: int = settings.AUDIO_DEVICE_INDEX,
         keywords: Optional[Set[str]] = None,
-        device_index: Optional[int] = settings.AUDIO_DEVICE_INDEX,
-        debounce_seconds: float = settings.AUDIO_DEBOUNCE_SEC,
         callback: Optional[Callable[[str, float], None]] = None,
+        debounce_sec: float = settings.AUDIO_DEBOUNCE_SEC
     ):
-        self.target_keywords = keywords or settings.AUDIO_SOS_KEYWORDS
         self.device_index = device_index
-        self.debounce_sec = debounce_seconds
-        self.on_sos_callback = callback
-        
-        self._recognizer = sr.Recognizer()
-        self._recognizer.energy_threshold = settings.AUDIO_ENERGY_THRESHOLD
-        self._recognizer.dynamic_energy_threshold = True
-        self._microphone: Optional[sr.Microphone] = None
-        
+        self.keywords = keywords if keywords else settings.AUDIO_SOS_KEYWORDS
+        self.callback = callback
+        self.debounce_sec = debounce_sec
+
+        self.recognizer = sr.Recognizer()
+        self.recognizer.energy_threshold = settings.AUDIO_ENERGY_THRESHOLD
+        self.recognizer.dynamic_energy_threshold = True
+
         self._running = False
+        self._last_trigger_timestamp = 0.0
         self._listener_thread: Optional[threading.Thread] = None
-        self.last_trigger_timestamp = 0.0
-        self.total_detections = 0
 
-    def initialize_mic(self) -> bool:
-        """Initializes and calibrates microphone hardware against ambient noise floor."""
-        try:
-            self._microphone = sr.Microphone(device_index=self.device_index)
-            with self._microphone as source:
-                logger.info("Calibrating microphone against ambient acoustic background... (please be quiet for 1s)")
-                self._recognizer.adjust_for_ambient_noise(source, duration=1.0)
-                logger.info(f"Calibration completed. Current dynamic energy threshold: {self._recognizer.energy_threshold}")
-            return True
-        except Exception as err:
-            logger.error(f"Microphone hardware initialization failed: {err}")
-            logger.warning(
-                "[!] No compatible audio capture hardware found.\n"
-                "    -> Audio SOS Listener will run in STANDBY/TEST mode.\n"
-                "    -> You can programmatically call `.simulate_keyword_trigger('Bachao')` during live demonstrations."
-            )
-            return False
-
-    def check_for_keyword(self, text: str) -> Optional[str]:
-        """
-        Scans transcribed input text for target safety keywords.
-        Returns the matched keyword or None.
-        """
-        normalized_text = text.lower().strip()
-        for kw in self.target_keywords:
-            if kw in normalized_text:
+    def _match_keywords_in_text(self, transcript: str) -> Optional[str]:
+        """Scans transcribed lowercased text against critical SOS phonetic expressions."""
+        lower_text = transcript.lower()
+        for kw in self.keywords:
+            if kw.lower() in lower_text:
                 return kw
         return None
 
-    def _process_audio_stream(self) -> None:
-        """Internal asynchronous processing loop running inside background thread."""
-        if not self._microphone:
-            logger.warning("No microphone assigned; audio loop suspended.")
-            return
+    def _audio_processing_loop(self) -> None:
+        """Core non-blocking listener loop operating in an independent background Daemon Thread."""
+        logger.info(f"🎤 Mounting Audio SOS Capture Engine on Hardware Device Index: [{self.device_index}]...")
 
-        logger.info(f"🎙️ Acoustic SOS surveillance ACTIVE. Listening for keywords: {list(self.target_keywords)}...")
-        
-        while self._running:
-            try:
-                with self._microphone as source:
-                    # Capture speech snippet
-                    audio_data = self._recognizer.listen(
-                        source, 
-                        timeout=settings.AUDIO_LISTEN_TIMEOUT_SEC, 
-                        phrase_time_limit=4.0
-                    )
-                
-                # Transcribe using Google Web Speech API (Defaulting to bilingual en-IN/hi-IN compatibility)
-                # Note: For strict offline deployment, switch to `self._recognizer.recognize_vosk(audio_data)`
-                transcription = self._recognizer.recognize_google(audio_data, language="en-IN")
-                logger.debug(f"Acoustic frame transcribed: '{transcription}'")
+        try:
+            # Mount Microphone hardware interface at confirmed default Index 0
+            with sr.Microphone(device_index=self.device_index) as source:
+                logger.info("   -> Calibrating ambient environmental noise threshold (Please remain quiet for 1.5s)...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=1.5)
+                logger.info(
+                    f"✅ Audio Calibration Complete. Dynamic Energy Threshold: {self.recognizer.energy_threshold}\n"
+                    f"   -> Actively listening for emergency keywords: {list(self.keywords)}"
+                )
 
-                matched_word = self.check_for_keyword(transcription)
-                if matched_word:
-                    self.trigger_alarm(matched_keyword=matched_word, source_text=transcription)
+                while self._running:
+                    try:
+                        # Capture live PCM speech sample with timeout limits
+                        audio_sample = self.recognizer.listen(
+                            source,
+                            timeout=settings.AUDIO_LISTEN_TIMEOUT_SEC,
+                            phrase_time_limit=4.0
+                        )
+                        
+                        # Transcribe speech via confirmed Google Web Speech API
+                        try:
+                            # Using general English/Hindi phonetic compatibility
+                            transcript = self.recognizer.recognize_google(audio_sample)
+                            logger.debug(f"Phonetic stream transcription intercepted: '{transcript}'")
 
-            except sr.WaitTimeoutError:
-                # Normal operational loop timeout when no speech is uttered in the frame
-                continue
-            except sr.UnknownValueError:
-                # Speech was detected but phonemes did not form recognizable dictionary words
-                continue
-            except sr.RequestError as api_err:
-                logger.error(f"Speech Recognition cloud gateway error: {api_err}. Continuing loop...")
-                time.sleep(1.5) # Throttle retry interval on network dropout
-            except Exception as unk_err:
-                logger.error(f"Unexpected error in audio capture loop: {unk_err}")
+                            matched_keyword = self._match_keywords_in_text(transcript)
+                            if matched_keyword:
+                                now = time.time()
+                                # Check debounce cooldown to avoid flooded repeated alarms on prolonged screams
+                                if (now - self._last_trigger_timestamp) >= self.debounce_sec:
+                                    self._last_trigger_timestamp = now
+                                    logger.critical(
+                                        f"🚨 ACOUSTIC DISTRESS DETECTED! Matched word: '{matched_keyword.upper()}' "
+                                        f"in transcript: '{transcript}'"
+                                    )
+                                    if self.callback:
+                                        self.callback(matched_keyword, now)
+                                else:
+                                    cooldown_left = round(self.debounce_sec - (now - self._last_trigger_timestamp), 1)
+                                    logger.info(f"⏳ Acoustic SOS detected ('{matched_keyword}'), but suppressed by debounce cooldown ({cooldown_left}s remaining).")
+                        
+                        except sr.UnknownValueError:
+                            # Speech was unintelligible or mere background transit engine rumble
+                            pass
+                        except sr.RequestError as req_err:
+                            logger.error(f"Google Web Speech API connection error: {req_err}. Check internet connectivity.")
+
+                    except sr.WaitTimeoutError:
+                        # Normal timeout when silence prevails in cabin; loop immediately continues
+                        continue
+                    except Exception as loop_exc:
+                        if self._running:
+                            logger.error(f"Exception encountered during acoustic sample extraction: {loop_exc}")
+                            time.sleep(1.0)
+
+        except Exception as hardware_exc:
+            logger.error(
+                f"\n[!] AUDIO HARDWARE INITIALIZATION FAILURE ON INDEX [{self.device_index}]: {hardware_exc}\n"
+                "    -> Operating in SIMULATED SPEECH MODE for evaluation presentations.\n"
+                "    -> You can manually trigger simulated vocal alarms by typing 'sos' in terminal command prompt!"
+            )
+            while self._running:
                 time.sleep(1.0)
 
-    def trigger_alarm(self, matched_keyword: str, source_text: str = "") -> bool:
-        """
-        Executes alert callback if debounce timer has expired.
-        Can also be invoked directly to simulate an emergency during presentation defense.
-        """
-        current_time = time.time()
-        if current_time - self.last_trigger_timestamp < self.debounce_sec:
-            logger.warning(f"⚠️ Acoustic keyword '{matched_keyword}' matched, but DEBOUNCE timer active. Ignoring.")
-            return False
-
-        self.last_trigger_timestamp = current_time
-        self.total_detections += 1
-
-        logger.critical(
-            f"\n🚨 [CRITICAL ALERT] ACOUSTIC SOS KEYWORD DETECTED!\n"
-            f"    -> Keyword Match: '{matched_keyword.upper()}'\n"
-            f"    -> Full Transcription: '{source_text}'\n"
-            f"    -> Timestamp: {current_time:.2f}"
-        )
-
-        if self.on_sos_callback:
-            try:
-                self.on_sos_callback(matched_keyword, current_time)
-            except Exception as cb_err:
-                logger.error(f"Error executing emergency callback wrapper: {cb_err}")
-
-        return True
-
-    def simulate_keyword_trigger(self, simulated_keyword: str = "Bachao (Simulated Demo)") -> None:
-        """
-        Helper function for immediate academic demonstration without needing a physical microphone.
-        """
-        logger.info(f"🤖 Manual test simulation triggered for keyword: '{simulated_keyword}'")
-        self.trigger_alarm(matched_keyword=simulated_keyword, source_text="Simulated acoustic input")
-
-    def start(self, run_mic_init: bool = True) -> None:
-        """Starts asynchronous audio surveillance background thread."""
+    def start(self) -> None:
+        """Spawns background listening thread without blocking main node supervisor execution."""
         if self._running:
             logger.warning("Audio SOS Listener thread is already active.")
             return
-
-        if run_mic_init:
-            self.initialize_mic()
-
+        
         self._running = True
-        self._listener_thread = threading.Thread(target=self._process_audio_stream, name="AudioSOSThread", daemon=True)
+        self._listener_thread = threading.Thread(target=self._audio_processing_loop, name="AudioSOSThread", daemon=True)
         self._listener_thread.start()
-        logger.info("Audio SOS background thread spawned successfully.")
+        logger.info("Acoustic Recognition background thread launched successfully.")
 
     def stop(self) -> None:
-        """Safely terminates audio monitoring background thread."""
-        logger.info("Terminating audio SOS background thread...")
+        """Safely terminates acoustic capture loop and releases audio interface lock."""
+        if not self._running:
+            return
+        logger.info("Shutting down Acoustic SOS listener stream...")
         self._running = False
         if self._listener_thread and self._listener_thread.is_alive():
             self._listener_thread.join(timeout=2.0)
-        logger.info("Audio SOS Listener shutdown complete.")
+        logger.info("Acoustic Recognition engine terminated.")
+
+    def simulate_keyword_trigger(self, simulated_keyword: str = "Bachao (Simulated Eval)") -> None:
+        """Public demonstration helper to fire callback during academic evaluation without speaking."""
+        now = time.time()
+        logger.warning(f"🎮 [SIMULATED EVALUATION TRIGGER] Injecting virtual acoustic SOS keyword: '{simulated_keyword}'")
+        self._last_trigger_timestamp = now
+        if self.callback:
+            self.callback(simulated_keyword, now)
