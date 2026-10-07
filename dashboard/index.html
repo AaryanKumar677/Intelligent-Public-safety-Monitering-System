@@ -64,11 +64,11 @@
         <section class="demo-controller-bar" aria-label="Simulation Command Toolbar">
             <span class="control-label"><i class="fa-solid fa-gamepad"></i> Demo Evaluation Controls:</span>
             <div class="button-group">
-                <button id="btn-toggle-voice" class="btn btn-mic-inactive" type="button" title="Start listening for speech through your microphone">
-                    <i class="fa-solid fa-microphone"></i> <span id="voice-btn-text">Turn ON Voice SOS (Mic)</span>
+                <button id="btn-toggle-voice" class="btn btn-mic-active" type="button" title="Hands-free mic is active. Click to pause/resume microphone">
+                    <i class="fa-solid fa-microphone-lines"></i> <span id="voice-btn-text">Voice SOS: AUTO-ACTIVE</span>
                 </button>
-                <button id="btn-simulate-sos" class="btn btn-danger" type="button">
-                    <i class="fa-solid fa-bullhorn"></i> Trigger Acoustic SOS ("Bachao!")
+                <button id="btn-simulate-sos" class="btn btn-danger" type="button" title="Physical button fallback in cabin">
+                    <i class="fa-solid fa-hand-fist"></i> Manual SOS Test (Fallback)
                 </button>
                 <button id="btn-simulate-crowd" class="btn btn-warning" type="button">
                     <i class="fa-solid fa-users"></i> Trigger Overcrowding Anomaly
@@ -82,29 +82,142 @@
         <!-- Real-Time Speech Feedback Bar -->
         <div id="voice-status-bar" class="voice-status-bar">
             <div class="voice-status-indicator">
-                <span id="voice-indicator-dot" class="mic-dot mic-dot-idle"></span>
-                <span id="voice-status-msg">Voice SOS is OFF. Click <strong>"Turn ON Voice SOS (Mic)"</strong> to speak "Bachao" or "Help".</span>
+                <span id="voice-indicator-dot" class="mic-dot mic-dot-listening"></span>
+                <span id="voice-status-msg"><strong>🎙️ Autonomous Voice SOS Active:</strong> Hands-free mic scanning for keywords <em>"Bachao"</em>, <em>"Help"</em>, <em>"Madad"</em>...</span>
             </div>
             <div id="voice-live-transcript" class="voice-live-transcript">Heard: <em>(Waiting for speech...)</em></div>
         </div>
 
         <!-- Main Dashboard Content Grid -->
         <main class="command-grid">
-            <!-- Left & Center: GIS Map Tracking & Telemetry Hub -->
-            <section class="gis-section card-glass">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-map-location-dot"></i> Live Vehicular Tracking & Responder Georouting</h2>
-                    <span id="active-vehicle-label" class="vehicle-tag">Vehicle ID: <strong>BUS-104-DL01</strong></span>
-                </div>
-                <div class="map-wrapper">
-                    <div id="gis-map" class="map-viewport"></div>
-                    <div class="map-legend">
-                        <span><i class="fa-solid fa-bus text-primary"></i> Active Transit Vehicle</span>
-                        <span><i class="fa-solid fa-building-shield text-info"></i> Mapped Police Station</span>
-                        <span><i class="fa-solid fa-route text-danger"></i> Emergency Routing Line</span>
+            <!-- Left Column: GIS Map & Live Incident Timeline -->
+            <div class="command-left-column">
+                <!-- Left & Center: GIS Map Tracking & Telemetry Hub -->
+                <section class="gis-section card-glass">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-map-location-dot"></i> Live Vehicular Tracking & Responder Georouting</h2>
+                        <span id="active-vehicle-label" class="vehicle-tag">Vehicle ID: <strong>BUS-104-DL01</strong></span>
                     </div>
-                </div>
-            </section>
+                    <div class="map-wrapper">
+                        <div id="gis-map" class="map-viewport"></div>
+                        <div class="map-legend">
+                            <span><i class="fa-solid fa-bus text-primary"></i> Active Transit Vehicle</span>
+                            <span><i class="fa-solid fa-building-shield text-info"></i> Mapped Police Station</span>
+                            <span><i class="fa-solid fa-route text-danger"></i> Emergency Routing Line</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Live Incident Response Timeline Card -->
+                <section class="card-glass incident-timeline-card" aria-label="Incident Pipeline Timeline">
+                    <div class="timeline-header-flex">
+                        <div class="timeline-title-wrap">
+                            <h3><i class="fa-solid fa-clock-rotate-left"></i> Live Incident Response Timeline</h3>
+                            <p class="timeline-subtitle">Autonomous Edge-to-Cloud Escalation Pipeline & Verification Telemetry</p>
+                        </div>
+                        <div class="timeline-status-pills">
+                            <span id="timeline-overall-badge" class="badge-mini status-online">SYSTEM STANDBY</span>
+                        </div>
+                    </div>
+
+                    <!-- 4 Connected Milestones -->
+                    <div class="timeline-steps-track">
+                        <!-- Step 1: Voice Detection / Trigger -->
+                        <div class="timeline-step" id="timeline-step-1">
+                            <div class="step-icon-wrap">
+                                <i class="fa-solid fa-microphone-lines"></i>
+                                <span class="step-num">1</span>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-head">
+                                    <span class="step-title">Voice Matched</span>
+                                    <span class="step-badge badge-idle" id="step-1-badge">AUTO-LISTENING</span>
+                                </div>
+                                <p class="step-desc" id="step-1-desc">Hands-free mic scanning for "Bachao"/"Help" (Manual fallback ready).</p>
+                                <div class="step-meta">
+                                    <span class="step-time" id="step-1-time">--:--:--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="step-connector" id="connector-1"></div>
+
+                        <!-- Step 2: Edge / Python Event Sync -->
+                        <div class="timeline-step" id="timeline-step-2">
+                            <div class="step-icon-wrap">
+                                <i class="fa-brands fa-python"></i>
+                                <span class="step-num">2</span>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-head">
+                                    <span class="step-title">Python Event</span>
+                                    <span class="step-badge badge-idle" id="step-2-badge">STANDBY</span>
+                                </div>
+                                <p class="step-desc" id="step-2-desc">IoT Gateway sync received; vehicle speed locked to 0.0 km/h.</p>
+                                <div class="step-meta">
+                                    <span class="step-time" id="step-2-time">--:--:--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="step-connector" id="connector-2"></div>
+
+                        <!-- Step 3: Responder Georoute Ready -->
+                        <div class="timeline-step" id="timeline-step-3">
+                            <div class="step-icon-wrap">
+                                <i class="fa-solid fa-route"></i>
+                                <span class="step-num">3</span>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-head">
+                                    <span class="step-title">Route Ready</span>
+                                    <span class="step-badge badge-idle" id="step-3-badge">STANDBY</span>
+                                </div>
+                                <p class="step-desc" id="step-3-desc">Nearest Police Station identified; dynamic GIS vector drawn.</p>
+                                <div class="step-meta">
+                                    <span class="step-time" id="step-3-time">--:--:--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="step-connector" id="connector-3"></div>
+
+                        <!-- Step 4: Notification Broadcast Status -->
+                        <div class="timeline-step" id="timeline-step-4">
+                            <div class="step-icon-wrap">
+                                <i class="fa-solid fa-tower-broadcast"></i>
+                                <span class="step-num">4</span>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-head">
+                                    <span class="step-title">Notification Status</span>
+                                    <span class="step-badge badge-idle" id="step-4-badge">STANDBY</span>
+                                </div>
+                                <p class="step-desc" id="step-4-desc">External notification dispatch (Twilio SMS / Console Broadcast).</p>
+                                <div class="step-meta">
+                                    <span class="step-time" id="step-4-time">--:--:--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Status Strip -->
+                    <div class="timeline-summary-strip">
+                        <div class="summary-item">
+                            <span class="summary-label">Active Trigger Source:</span>
+                            <strong id="timeline-trigger-source">None (Normal Transit)</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Nearest Police Station:</span>
+                            <strong id="timeline-nearest-post">Connaught Place Police Station (1.2 km)</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Authority Dispatch Result:</span>
+                            <span id="timeline-dispatch-verified" class="badge-mini badge-demo">STANDBY</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
 
             <!-- Right: Real-time Sensors & Telemetry Statistics -->
             <aside class="telemetry-aside">
@@ -217,6 +330,7 @@
                         Spoken</span></p>
                 <p><strong>Affected Vehicle:</strong> BUS-104-DL01 (Route 412 Metro Link)</p>
                 <p><strong>Nearest Landmark:</strong> <span id="modal-location">Connaught Place Hub</span></p>
+                <p><strong>Authority Notification:</strong> <span id="modal-notif-status" class="badge-mini status-warning">DEMO ONLY (Mock Console Logged)</span></p>
                 <p><strong>Automated Action:</strong> Vehicle halted. High-priority SMS Emergency Alert transmitted to
                     configured contact (<strong>+91 8318326641</strong>). Automated rescue georouting calculated to
                     nearest Police Station.</p>
@@ -241,9 +355,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
     <!-- Custom Vanilla JavaScript Application Logic -->
-    <script src="./assets/js/alert-handler.js?v=13"></script>
-    <script src="./assets/js/map-controller.js?v=13"></script>
-    <script src="./assets/js/firebase-app.js?v=13"></script>
+    <script src="./assets/js/timeline-controller.js?v=14"></script>
+    <script src="./assets/js/alert-handler.js?v=14"></script>
+    <script src="./assets/js/map-controller.js?v=14"></script>
+    <script src="./assets/js/firebase-app.js?v=14"></script>
 </body>
 
 </html>

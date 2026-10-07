@@ -19,6 +19,7 @@ class EmergencyAlertController {
         this.modal = document.getElementById('emergency-modal');
         this.incidentSpan = document.getElementById('modal-incident-type');
         this.locationSpan = document.getElementById('modal-location');
+        this.notifStatusSpan = document.getElementById('modal-notif-status');
         this.ackButton = document.getElementById('btn-acknowledge-alert');
 
         this._bindEvents();
@@ -151,7 +152,7 @@ class EmergencyAlertController {
     /**
      * Triggers Level-1 Critical Emergency override sequence across UI and audio speakers.
      */
-    triggerEmergencyOverride(triggerReason = "Acoustic Keyword ('Bachao') Vocalized", locationText = "Connaught Place Hub") {
+    triggerEmergencyOverride(triggerReason = "Acoustic Keyword ('Bachao') Vocalized", locationText = "Connaught Place Hub", notificationStatus = null) {
         // Prevent duplicate trigger if already active
         if (this.isAlarmActive) return;
         this.isAlarmActive = true;
@@ -171,6 +172,23 @@ class EmergencyAlertController {
         if (this.modal) {
             if (this.incidentSpan) this.incidentSpan.textContent = triggerReason;
             if (this.locationSpan) this.locationSpan.textContent = locationText;
+            
+            // Truthful Notification status on modal
+            if (this.notifStatusSpan) {
+                const notif = notificationStatus || window.lastKnownNotificationStatus || "DEMO ONLY";
+                const s = notif.toUpperCase();
+                if (s.includes("SENT") || s === "DELIVERED") {
+                    this.notifStatusSpan.className = "badge-mini status-online";
+                    this.notifStatusSpan.textContent = "SENT (+91 8318326641)";
+                } else if (s.includes("FAIL")) {
+                    this.notifStatusSpan.className = "badge-mini status-critical";
+                    this.notifStatusSpan.textContent = "FAILED (Cellular Buffer)";
+                } else {
+                    this.notifStatusSpan.className = "badge-mini status-warning";
+                    this.notifStatusSpan.textContent = "DEMO ONLY (Mock Console Logged)";
+                }
+            }
+
             try {
                 this.modal.showModal();
             } catch (err) {
@@ -186,6 +204,22 @@ class EmergencyAlertController {
         // 5. Append critical log bulletin
         if (window.appendLogEntry) {
             window.appendLogEntry("CRITICAL", `EMERGENCY OVERRIDE ENGAGED: ${triggerReason}. Automated rescue georouting active.`);
+        }
+
+        // 6. Trigger Live Incident Response Timeline Pipeline
+        if (window.TimelineControllerInstance) {
+            const lowerReason = triggerReason.toLowerCase();
+            const isVoice = lowerReason.includes("voice") ||
+                            lowerReason.includes("acoustic") ||
+                            lowerReason.includes("bachao") ||
+                            lowerReason.includes("help") ||
+                            lowerReason.includes("madad");
+            window.TimelineControllerInstance.triggerIncident({
+                source: isVoice ? "VOICE" : "MANUAL",
+                keyword: triggerReason,
+                location: locationText,
+                notificationStatus: notificationStatus || window.lastKnownNotificationStatus || null
+            });
         }
     }
 
@@ -221,6 +255,11 @@ class EmergencyAlertController {
         // Clear emergency routing line from GIS map
         if (window.MapControllerInstance && typeof window.MapControllerInstance.clearEmergencyRouting === 'function') {
             window.MapControllerInstance.clearEmergencyRouting();
+        }
+
+        // Reset Incident Response Timeline back to standby
+        if (window.TimelineControllerInstance) {
+            window.TimelineControllerInstance.resetTimeline();
         }
     }
 

@@ -413,11 +413,12 @@ class CommandCenterApp {
                             voiceLiveTranscript.innerHTML = `🚨 MATCHED: <strong style="color:#FF3A2D;">"${matchedWord.toUpperCase()}"</strong>!`;
                         }
                         if (window.AlertHandlerInstance && !window.AlertHandlerInstance.isAlarmActive) {
-                            appendLogEntry("CRITICAL", `🎙️ Voice SOS Triggered! Keyword matched: "${matchedWord}" in transcript "${transcript}".`);
+                            appendLogEntry("CRITICAL", `🎙️ Autonomous Voice SOS Triggered! Keyword matched: "${matchedWord}" in transcript "${transcript}".`);
                             if (this.speedEl) this.speedEl.textContent = "0.0";
                             window.AlertHandlerInstance.triggerEmergencyOverride(
                                 `Acoustic Keyword ("${matchedWord}") Recognized`,
-                                this.stopEl ? this.stopEl.textContent : "Active Transit Corridor"
+                                this.stopEl ? this.stopEl.textContent : "Active Transit Corridor",
+                                window.lastKnownNotificationStatus || "DEMO ONLY"
                             );
                         }
                     }
@@ -497,7 +498,7 @@ class CommandCenterApp {
                 voiceIndicatorDot.className = "mic-dot mic-dot-listening";
             }
             if (voiceStatusMsg) {
-                voiceStatusMsg.innerHTML = `<strong>🎙️ Voice SOS Auto-Active!</strong> Speak <em>"Bachao"</em> or <em>"Help"</em> anytime to trigger emergency.`;
+                voiceStatusMsg.innerHTML = `<strong>🎙️ Autonomous Voice SOS Active:</strong> Hands-free mic scanning for keywords <em>"Bachao"</em>, <em>"Help"</em>, <em>"Madad"</em>...`;
             }
         } else {
             if (btnToggleVoice) {
@@ -575,10 +576,13 @@ class CommandCenterApp {
 
         // Intercept emergency level overrides
         if (data.status && data.status.sos_triggered) {
+            const notifStatus = data.status.notification_status || (data["notification_status"]) || null;
+            window.lastKnownNotificationStatus = notifStatus;
             if (window.AlertHandlerInstance && typeof window.AlertHandlerInstance.triggerEmergencyOverride === 'function') {
                 window.AlertHandlerInstance.triggerEmergencyOverride(
                     `Acoustic Keyword ("${data.status.sos_keyword_matched || 'Bachao'}") Recognized`,
-                    data.location ? data.location.current_stop : "Unknown Landmark"
+                    data.location ? data.location.current_stop : "Unknown Landmark",
+                    notifStatus
                 );
             }
         } else {
@@ -640,7 +644,11 @@ class CommandCenterApp {
                 
                 // The Python mock dict stores paths as keys (e.g., 'vehicles/BUS-104-DL01')
                 const busData = data["vehicles/BUS-104-DL01"];
+                const statusData = data["vehicles/BUS-104-DL01/status"];
                 if (busData) {
+                    if (statusData) {
+                        busData.status = Object.assign({}, busData.status || {}, statusData);
+                    }
                     this._renderTelemetry(busData);
                 }
             } catch (err) {
@@ -656,10 +664,14 @@ class CommandCenterApp {
 
         if (btnSOS) {
             btnSOS.addEventListener('click', () => {
-                appendLogEntry("CRITICAL", "Demo Override: Simulated passenger screaming distress keyword ('Bachao!') in cabin.");
+                appendLogEntry("CRITICAL", "Manual Fallback: Passenger triggered physical cabin emergency panic button.");
                 if (this.speedEl) this.speedEl.textContent = "0.0";
                 if (window.AlertHandlerInstance) {
-                    window.AlertHandlerInstance.triggerEmergencyOverride("Acoustic Keyword ('Bachao!') Spoken", this.transitStops[this.currentLandmarkIndex]);
+                    window.AlertHandlerInstance.triggerEmergencyOverride(
+                        "Manual Emergency Panic Button (Fallback)",
+                        this.transitStops[this.currentLandmarkIndex],
+                        "DEMO ONLY"
+                    );
                 }
             });
         }

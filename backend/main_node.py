@@ -69,21 +69,37 @@ class IntelligentTransitNode:
         self.gps_engine.set_emergency_halt(True)
         telemetry = self.gps_engine.get_current_state()
 
+        # Dispatch automated SMS / Telegram alerts
+        notif_sent = dispatch_emergency_notification(
+            alert_type="Acoustic SOS Emergency Triggered",
+            details=f"Passenger vocalized emergency distress keyword: '{matched_keyword.upper()}'. Cabin in danger.",
+            telemetry=telemetry
+        )
+
+        # Truthful External Notification State Determination
+        if _dispatcher.provider == "mock" or (
+            _dispatcher.provider == "twilio" and not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN)
+        ) or (
+            _dispatcher.provider == "telegram" and not (settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID)
+        ):
+            notif_status_str = "Demo Only (Mock Console Logged)"
+        elif notif_sent:
+            notif_status_str = "Sent (+91 8318326641)"
+        else:
+            notif_status_str = "Failed"
+
+        self.last_notif_status = notif_status_str
+        self.sos_keyword = matched_keyword
+
         # Zero-latency priority transmission to Cloud RTDB
         emergency_payload = {
             "sos_triggered": True,
             "sos_keyword_matched": matched_keyword,
             "incident_timestamp": int(timestamp),
-            "emergency_status": "CRITICAL - LEVEL 1 ACTIVE SOS"
+            "emergency_status": "CRITICAL - LEVEL 1 ACTIVE SOS",
+            "notification_status": notif_status_str
         }
         firebase_config.trigger_emergency_override(self.vehicle_id, emergency_payload)
-
-        # Dispatch automated SMS / Telegram alerts
-        dispatch_emergency_notification(
-            alert_type="Acoustic SOS Emergency Triggered",
-            details=f"Passenger vocalized emergency distress keyword: '{matched_keyword.upper()}'. Cabin in danger.",
-            telemetry=telemetry
-        )
 
         # Trigger AI Voice Calls with 3-time retry
         maps_link = f"https://www.google.com/maps?q={telemetry.get('latitude')},{telemetry.get('longitude')}"
@@ -239,8 +255,10 @@ class IntelligentTransitNode:
                         },
                         "status": {
                             "sos_triggered": self.sos_active,
+                            "sos_keyword_matched": getattr(self, "sos_keyword", None),
                             "crowd_alert": self.crowd_alert_active,
-                            "emergency_halt": geo_telemetry["emergency_halt_active"]
+                            "emergency_halt": geo_telemetry["emergency_halt_active"],
+                            "notification_status": getattr(self, "last_notif_status", "STANDBY")
                         }
                     }
 
