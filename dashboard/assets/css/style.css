@@ -507,6 +507,54 @@ body.theme-dark {
     margin-right: 6px;
 }
 
+/* Edge Hardware Video & YOLOv8 Canvas Overlay Container */
+.edge-camera-container {
+    position: relative;
+    width: 100%;
+    height: 180px;
+    background: #060A12;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    border: 1px solid rgba(0, 217, 126, 0.3);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
+#edge-camera-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+#edge-camera-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.edge-camera-overlay {
+    position: absolute;
+    bottom: 8px;
+    left: 10px;
+    background: rgba(10, 16, 28, 0.85);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #00D97E;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 3;
+    border: 1px solid rgba(0, 217, 126, 0.3);
+    backdrop-filter: blur(4px);
+}
+
 /* YOLOv8 Pax Density Indicator */
 .pax-counter-display {
     display: flex;
