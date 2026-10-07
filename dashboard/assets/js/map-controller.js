@@ -60,7 +60,7 @@ class GISMapController {
 
         // Deploy Transit Vehicle surveillance icon
         this.busMarker = L.marker(this.currentBusCoords, { icon: busIcon, zIndexOffset: 1000 }).addTo(this.map);
-        this.busMarker.bindPopup(`<b>🚌 BUS-104-DL01 (Route 412)</b><br>Status: Safe Active Surveillance<br>Speed: Normal (35.0 km/h)`).openPopup();
+        this.busMarker.bindPopup(`<b>🚌 BUS-104-DL01 (Route 412)</b><br>Status: Safe Active Surveillance<br>Speed: 0.0 km/h (Stationary)`).openPopup();
 
         // Deploy Emergency reaction facilities onto basemap
         this.emergencyStations.forEach(station => {
@@ -84,7 +84,7 @@ class GISMapController {
     /**
      * Updates simulated bus location coordinates dynamically from Firebase or simulator heartbeats.
      */
-    updateVehicleLocation(lat, lng, heading = 0, stopName = "Unknown Landmark", speedKmh = 35, isSOS = false) {
+    updateVehicleLocation(lat, lng, heading = 0, stopName = "Unknown Landmark", speedKmh = 0, isSOS = false) {
         if (!this.map || !this.busMarker) return;
 
         // Automatically teleport police stations to the user's actual city on first load!

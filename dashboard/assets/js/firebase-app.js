@@ -13,8 +13,8 @@ class CommandCenterApp {
     constructor() {
         this.db = null;
         this.isConnected = false;
-        this.simulatedPax = 2;
-        this.simulatedSpeed = 35.0;
+        this.simulatedPax = 0;
+        this.actualGpsSpeed = 0.0;
         this.simulatedHeading = 124;
         this.currentLandmarkIndex = 0;
         
@@ -83,18 +83,62 @@ class CommandCenterApp {
         appendLogEntry("WARN", "Running in Local Python File-Sync Bridge Mode. Backend updates will reflect live.");
 
         // --- TRUE HARDWARE GPS TRACKING OVERRIDE ---
-        // Bypasses IP-API and securely uses the laptop's built-in Location Services for precise tracking
+        // Bypasses simulated telemetry and securely uses the device's real physical GPS for tracking & actual velocity
         if ("geolocation" in navigator) {
+            this.lastGpsTimestamp = null;
+            this.lastGpsLat = null;
+            this.lastGpsLng = null;
+            this.actualGpsSpeed = 0.0;
+
             navigator.geolocation.watchPosition((position) => {
-                this.trueLat = position.coords.latitude;
-                this.trueLng = position.coords.longitude;
-                // If speed is available from hardware, we can also use it
-                if (position.coords.speed !== null) {
-                    this.trueSpeed = (position.coords.speed * 3.6).toFixed(1); // m/s to km/h
+                const now = position.timestamp || Date.now();
+                const curLat = position.coords.latitude;
+                const curLng = position.coords.longitude;
+                
+                this.trueLat = curLat;
+                this.trueLng = curLng;
+
+                // 1. Check if hardware GPS chip directly provides Doppler speed (e.g. mobile in moving car/bus)
+                if (position.coords.speed !== null && !isNaN(position.coords.speed) && position.coords.speed >= 0) {
+                    this.actualGpsSpeed = Number((position.coords.speed * 3.6).toFixed(1)); // m/s to km/h
+                } else if (this.lastGpsLat !== null && this.lastGpsLng !== null && this.lastGpsTimestamp !== null) {
+                    // 2. Hardware GPS didn't supply Doppler velocity (laptop / stationary phone):
+                    // Calculate physical displacement delta over time
+                    const dt = (now - this.lastGpsTimestamp) / 1000; // seconds
+                    if (dt > 0.5) {
+                        const distMeters = this._calculateHaversineMeters(this.lastGpsLat, this.lastGpsLng, curLat, curLng);
+                        // Filter out normal GPS jitter (< 3 meters while standing/sitting still)
+                        if (distMeters < 3.0) {
+                            this.actualGpsSpeed = 0.0;
+                        } else {
+                            const speedKmh = (distMeters / dt) * 3.6;
+                            this.actualGpsSpeed = Number(Math.min(120, speedKmh).toFixed(1));
+                        }
+                    }
+                } else {
+                    this.actualGpsSpeed = 0.0;
                 }
+
+                this.lastGpsLat = curLat;
+                this.lastGpsLng = curLng;
+                this.lastGpsTimestamp = now;
+
+                // Update UI speed element immediately with ACTUAL real speed
+                if (this.speedEl) {
+                    this.speedEl.textContent = Number(this.actualGpsSpeed).toFixed(1);
+                }
+
+                // If device heading is available
+                if (position.coords.heading !== null && !isNaN(position.coords.heading)) {
+                    this.trueHeading = Number(position.coords.heading).toFixed(1);
+                    if (this.headingEl) this.headingEl.textContent = `${this.trueHeading}°`;
+                }
+
             }, (error) => {
-                console.warn("Browser GPS permission denied or unavailable. Falling back to Python simulator.");
-            }, { enableHighAccuracy: true, maximumAge: 0 });
+                console.warn("Browser GPS permission denied. Speed strictly set to 0.0 km/h.");
+                this.actualGpsSpeed = 0.0;
+                if (this.speedEl) this.speedEl.textContent = "0.0";
+            }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
         }
         
         // --- EDGE CAMERA ACCESS (PHONE REAR CAMERA) ---
@@ -469,6 +513,17 @@ class CommandCenterApp {
         }
     }
 
+    _calculateHaversineMeters(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Earth radius in meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
     _subscribeToTelemetry() {
         if (!this.db) return;
         const busRef = this.db.ref("vehicles/BUS-104-DL01");
@@ -501,7 +556,9 @@ class CommandCenterApp {
                 loc.latitude = this.trueLat;
                 loc.longitude = this.trueLng;
                 loc.current_stop = "True Hardware GPS Track";
-                if (this.trueSpeed) loc.speed_kmh = this.trueSpeed;
+                loc.speed_kmh = this.actualGpsSpeed !== undefined ? this.actualGpsSpeed : 0.0;
+            } else {
+                loc.speed_kmh = 0.0; // Real stationary default - NO FAKE SPEED!
             }
 
             if (this.speedEl) this.speedEl.textContent = Number(loc.speed_kmh || 0).toFixed(1);
@@ -618,8 +675,8 @@ class CommandCenterApp {
         if (btnReset) {
             btnReset.addEventListener('click', () => {
                 appendLogEntry("INFO", "Demo Override: Resetting system to normal safe surveillance mode.");
-                this.updatePassengerDensityUI(2, false);
-                if (this.speedEl) this.speedEl.textContent = "35.0";
+                this.updatePassengerDensityUI(0, false);
+                if (this.speedEl) this.speedEl.textContent = Number(this.actualGpsSpeed || 0.0).toFixed(1);
                 if (window.AlertHandlerInstance) {
                     window.AlertHandlerInstance.acknowledgeAlarm();
                 }
