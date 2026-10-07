@@ -99,6 +99,9 @@ class CommandCenterApp {
         
         // --- EDGE CAMERA ACCESS (PHONE REAR CAMERA) ---
         this._initEdgeCamera();
+
+        // --- IN-BROWSER ACOUSTIC SOS LISTENER (VOICE TRIGGER: 'BACHAO' / 'HELP') ---
+        this._initBrowserSpeechRecognition();
     }
 
     async _initEdgeCamera() {
@@ -124,6 +127,64 @@ class CommandCenterApp {
                 statusText.textContent = "CAMERA BLOCKED (NEEDS HTTPS)";
                 statusText.style.color = "#FF3A2D";
             }
+        }
+    }
+
+    /**
+     * In-Browser Real-Time Voice Recognition using Web Speech API
+     * Listens for acoustic emergency distress keywords ('Bachao', 'Help', 'Madad') hands-free
+     */
+    _initBrowserSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.warn("Web Speech API not supported in this browser. Use demo button.");
+            return;
+        }
+
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'hi-IN'; // Supports Hindi ('bachao') and English ('help')
+
+            recognition.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = (event.results[i][0].transcript || "").toLowerCase();
+                    console.log("🎙️ Live Acoustic Input:", transcript);
+
+                    // Check for distress trigger keywords
+                    if (transcript.includes("bachao") || transcript.includes("help") || transcript.includes("madad") || transcript.includes("save")) {
+                        appendLogEntry("CRITICAL", `🎙️ Emergency Distress Keyword ("${transcript.trim()}") Detected via Microphone!`);
+                        if (this.speedEl) this.speedEl.textContent = "0.0";
+                        if (window.AlertHandlerInstance) {
+                            window.AlertHandlerInstance.triggerEmergencyOverride(
+                                `Acoustic Keyword ("${transcript.trim()}") Vocalized`,
+                                this.stopEl ? this.stopEl.textContent : "Active Corridor"
+                            );
+                        }
+                    }
+                }
+            };
+
+            recognition.onerror = (e) => {
+                console.warn("Speech recognition notice:", e.error);
+            };
+
+            recognition.onend = () => {
+                // Keep continuous listening active in background
+                try { recognition.start(); } catch (e) {}
+            };
+
+            // Start listening immediately or on user gesture
+            const startListener = () => {
+                try { recognition.start(); } catch (e) {}
+            };
+            document.addEventListener('click', startListener, { once: true });
+            startListener();
+
+            appendLogEntry("INFO", "Acoustic Voice Listener Active: Speak 'Bachao' or 'Help' to trigger SOS.");
+        } catch (err) {
+            console.warn("Could not start Web Speech Recognition:", err);
         }
     }
 
