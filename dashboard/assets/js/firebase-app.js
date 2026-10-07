@@ -135,31 +135,55 @@ class CommandCenterApp {
      * Listens for acoustic emergency distress keywords ('Bachao', 'Help', 'Madad') hands-free
      */
     _initBrowserSpeechRecognition() {
+        this.isVoiceListening = false;
+        this.speechRecognition = null;
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const btnToggleVoice = document.getElementById('btn-toggle-voice');
+        const voiceStatusMsg = document.getElementById('voice-status-msg');
+        const voiceLiveTranscript = document.getElementById('voice-live-transcript');
+
         if (!SpeechRecognition) {
             console.warn("Web Speech API not supported in this browser. Use demo button.");
+            if (voiceStatusMsg) voiceStatusMsg.textContent = "Web Speech API not supported in this browser. Use manual demo button.";
             return;
         }
 
         try {
             const recognition = new SpeechRecognition();
+            this.speechRecognition = recognition;
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = 'hi-IN'; // Supports Hindi ('bachao') and English ('help')
+            recognition.lang = 'hi-IN'; // Recognizes Hindi ('बचाओ', 'मदद') and English ('help', 'emergency')
+
+            const distressKeywords = [
+                // Roman English & Hindi
+                "bachao", "bachav", "bachaoo", "help", "madad", "save", "emergency", "police",
+                // Devanagari Hindi Script (What Google STT outputs for Hindi speech!)
+                "बचाओ", "बचाव", "मदद", "हेल्प", "सहायता", "इमरजेंसी", "पुलिस"
+            ];
 
             recognition.onresult = (event) => {
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const transcript = (event.results[i][0].transcript || "").toLowerCase();
+                    const transcript = (event.results[i][0].transcript || "").trim().toLowerCase();
                     console.log("🎙️ Live Acoustic Input:", transcript);
+                    
+                    if (voiceLiveTranscript) {
+                        voiceLiveTranscript.innerHTML = `Heard: <strong>"${transcript}"</strong>`;
+                    }
 
-                    // Check for distress trigger keywords
-                    if (transcript.includes("bachao") || transcript.includes("help") || transcript.includes("madad") || transcript.includes("save")) {
-                        appendLogEntry("CRITICAL", `🎙️ Emergency Distress Keyword ("${transcript.trim()}") Detected via Microphone!`);
+                    // Check if any distress keyword matches
+                    const matchedWord = distressKeywords.find(keyword => transcript.includes(keyword));
+                    if (matchedWord) {
+                        if (voiceLiveTranscript) {
+                            voiceLiveTranscript.innerHTML = `🚨 MATCHED: <strong style="color:#FF3A2D;">"${matchedWord.toUpperCase()}"</strong>!`;
+                        }
+                        appendLogEntry("CRITICAL", `🎙️ Voice SOS Triggered! Keyword matched: "${matchedWord}" in transcript "${transcript}".`);
                         if (this.speedEl) this.speedEl.textContent = "0.0";
                         if (window.AlertHandlerInstance) {
                             window.AlertHandlerInstance.triggerEmergencyOverride(
-                                `Acoustic Keyword ("${transcript.trim()}") Vocalized`,
-                                this.stopEl ? this.stopEl.textContent : "Active Corridor"
+                                `Acoustic Keyword ("${matchedWord}") Recognized`,
+                                this.stopEl ? this.stopEl.textContent : "Active Transit Corridor"
                             );
                         }
                     }
@@ -168,23 +192,75 @@ class CommandCenterApp {
 
             recognition.onerror = (e) => {
                 console.warn("Speech recognition notice:", e.error);
+                if (e.error === 'not-allowed') {
+                    if (voiceStatusMsg) voiceStatusMsg.textContent = "⚠️ Mic permission denied. Please allow microphone in your browser address bar!";
+                    this.isVoiceListening = false;
+                    this._updateVoiceUIState(false);
+                }
             };
 
             recognition.onend = () => {
-                // Keep continuous listening active in background
-                try { recognition.start(); } catch (e) {}
+                // If user intended to keep listening, auto-restart
+                if (this.isVoiceListening) {
+                    setTimeout(() => {
+                        try { recognition.start(); } catch (err) {}
+                    }, 300);
+                } else {
+                    this._updateVoiceUIState(false);
+                }
             };
 
-            // Start listening immediately or on user gesture
-            const startListener = () => {
-                try { recognition.start(); } catch (e) {}
-            };
-            document.addEventListener('click', startListener, { once: true });
-            startListener();
+            // Bind toggle button
+            if (btnToggleVoice) {
+                btnToggleVoice.addEventListener('click', () => {
+                    if (this.isVoiceListening) {
+                        // Stop listening
+                        this.isVoiceListening = false;
+                        try { recognition.stop(); } catch (err) {}
+                        this._updateVoiceUIState(false);
+                        appendLogEntry("INFO", "Voice SOS Listener paused by user.");
+                    } else {
+                        // Start listening
+                        this.isVoiceListening = true;
+                        try { recognition.start(); } catch (err) {}
+                        this._updateVoiceUIState(true);
+                        appendLogEntry("INFO", "🎙️ Voice SOS Listener ACTIVATED. Say 'Bachao' or 'Help' to test.");
+                    }
+                });
+            }
 
-            appendLogEntry("INFO", "Acoustic Voice Listener Active: Speak 'Bachao' or 'Help' to trigger SOS.");
         } catch (err) {
-            console.warn("Could not start Web Speech Recognition:", err);
+            console.warn("Could not setup Web Speech Recognition:", err);
+        }
+    }
+
+    _updateVoiceUIState(active) {
+        const btnToggleVoice = document.getElementById('btn-toggle-voice');
+        const voiceStatusMsg = document.getElementById('voice-status-msg');
+        const voiceIndicatorDot = document.getElementById('voice-indicator-dot');
+
+        if (active) {
+            if (btnToggleVoice) {
+                btnToggleVoice.className = "btn btn-mic-active";
+                btnToggleVoice.innerHTML = `<i class="fa-solid fa-microphone-lines"></i> <span id="voice-btn-text">Voice SOS: ACTIVE (Listening...)</span>`;
+            }
+            if (voiceIndicatorDot) {
+                voiceIndicatorDot.className = "mic-dot mic-dot-listening";
+            }
+            if (voiceStatusMsg) {
+                voiceStatusMsg.innerHTML = `<strong>🎙️ Mic Active!</strong> Speak <em>"Bachao"</em>, <em>"Help"</em>, or <em>"Madad"</em> to trigger alarm.`;
+            }
+        } else {
+            if (btnToggleVoice) {
+                btnToggleVoice.className = "btn btn-mic-inactive";
+                btnToggleVoice.innerHTML = `<i class="fa-solid fa-microphone"></i> <span id="voice-btn-text">Turn ON Voice SOS (Mic)</span>`;
+            }
+            if (voiceIndicatorDot) {
+                voiceIndicatorDot.className = "mic-dot mic-dot-idle";
+            }
+            if (voiceStatusMsg) {
+                voiceStatusMsg.innerHTML = `Voice SOS is OFF. Click <strong>"Turn ON Voice SOS (Mic)"</strong> to test voice detection.`;
+            }
         }
     }
 

@@ -25,7 +25,7 @@
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
     <!-- Custom Premium Styling System -->
-    <link rel="stylesheet" href="./assets/css/style.css?v=7">
+    <link rel="stylesheet" href="./assets/css/style.css?v=9">
 </head>
 
 <body class="theme-dark">
@@ -64,6 +64,9 @@
         <section class="demo-controller-bar" aria-label="Simulation Command Toolbar">
             <span class="control-label"><i class="fa-solid fa-gamepad"></i> Demo Evaluation Controls:</span>
             <div class="button-group">
+                <button id="btn-toggle-voice" class="btn btn-mic-inactive" type="button" title="Start listening for speech through your microphone">
+                    <i class="fa-solid fa-microphone"></i> <span id="voice-btn-text">Turn ON Voice SOS (Mic)</span>
+                </button>
                 <button id="btn-simulate-sos" class="btn btn-danger" type="button">
                     <i class="fa-solid fa-bullhorn"></i> Trigger Acoustic SOS ("Bachao!")
                 </button>
@@ -75,6 +78,15 @@
                 </button>
             </div>
         </section>
+
+        <!-- Real-Time Speech Feedback Bar -->
+        <div id="voice-status-bar" class="voice-status-bar">
+            <div class="voice-status-indicator">
+                <span id="voice-indicator-dot" class="mic-dot mic-dot-idle"></span>
+                <span id="voice-status-msg">Voice SOS is OFF. Click <strong>"Turn ON Voice SOS (Mic)"</strong> to speak "Bachao" or "Help".</span>
+            </div>
+            <div id="voice-live-transcript" class="voice-live-transcript">Heard: <em>(Waiting for speech...)</em></div>
+        </div>
 
         <!-- Main Dashboard Content Grid -->
         <main class="command-grid">
@@ -228,9 +240,9 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 
     <!-- Custom Vanilla JavaScript Application Logic -->
-    <script src="./assets/js/alert-handler.js?v=8"></script>
-    <script src="./assets/js/map-controller.js?v=8"></script>
-    <script src="./assets/js/firebase-app.js?v=8"></script>
+    <script src="./assets/js/alert-handler.js?v=9"></script>
+    <script src="./assets/js/map-controller.js?v=9"></script>
+    <script src="./assets/js/firebase-app.js?v=9"></script>
 </body>
 
 </html>

@@ -257,6 +257,83 @@ body.theme-dark {
     color: #101622;
 }
 
+.btn-mic-inactive {
+    background: rgba(0, 210, 255, 0.15);
+    color: #00D2FF;
+    border: 1px solid rgba(0, 210, 255, 0.5) !important;
+}
+
+.btn-mic-inactive:hover {
+    background: rgba(0, 210, 255, 0.3);
+}
+
+.btn-mic-active {
+    background: linear-gradient(135deg, #FF3A2D, #FF7A00) !important;
+    color: #FFF !important;
+    border: 1px solid #FF3A2D !important;
+    box-shadow: 0 0 15px rgba(255, 58, 45, 0.7);
+    animation: pulse-mic-btn 1.4s infinite;
+}
+
+@keyframes pulse-mic-btn {
+    0%, 100% { box-shadow: 0 0 15px rgba(255, 58, 45, 0.7); }
+    50% { box-shadow: 0 0 25px rgba(255, 58, 45, 0.95); transform: scale(1.02); }
+}
+
+/* --- VOICE STATUS & TRANSCRIPT BAR --- */
+.voice-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(14, 22, 38, 0.95);
+    border: 1px solid rgba(0, 210, 255, 0.25);
+    border-radius: 10px;
+    padding: 8px 18px;
+    font-size: 13px;
+    gap: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.voice-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-primary);
+    flex-grow: 1;
+}
+
+.mic-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.mic-dot-idle {
+    background: #8892B0;
+}
+
+.mic-dot-listening {
+    background: #00D97E;
+    box-shadow: 0 0 10px #00D97E;
+    animation: pulse-dot 1s infinite;
+}
+
+.voice-live-transcript {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #00D2FF;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* --- MAIN COMMAND GRID --- */
 .command-grid {
     display: grid;
