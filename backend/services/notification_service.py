@@ -7,6 +7,7 @@ or reaction teams via Telegram Bot API, Twilio SMS/Voice, or simulated Terminal 
 import logging
 from typing import Dict, Any, Optional
 import requests
+import time
 
 from backend.config import settings
 
@@ -109,6 +110,91 @@ class AlertDispatcher:
         """Simulates external communications gateway for local terminal demonstrations."""
         divider = "=" * 70
         print(f"\n{divider}\n📡 [MOCK NOTIFICATION GATEWAY] BROADCASTING TO REACTION TEAM:\n{divider}\n{message}\n{divider}\n")
+        return True
+
+    def trigger_emergency_voice_call(self, victim_contacts: list, police_contact: str, tracking_link: str) -> bool:
+        """
+        Initiates automated AI Voice Calls (TwiML) to contacts with a 3-time retry mechanism.
+        """
+        if not _TWILIO_INSTALLED:
+            logger.error("Twilio Python SDK not installed. Rerouting voice call to mock console output.")
+            return self.send_mock_voice_call(victim_contacts, police_contact, tracking_link)
+
+        sid = settings.TWILIO_ACCOUNT_SID
+        token = settings.TWILIO_AUTH_TOKEN
+        sender = settings.TWILIO_SENDER_PHONE
+
+        if not all([sid, token, sender]):
+            logger.warning("[!] Incomplete Twilio credentials in .env. Rerouting voice call to mock console output.")
+            return self.send_mock_voice_call(victim_contacts, police_contact, tracking_link)
+
+        client = TwilioClient(sid, token)
+        
+        twiml_script = f"""<Response>
+            <Say voice="alice" language="en-US">
+                🚨 Alert! This is an automated emergency call from the Transit Safety System. A passenger requires immediate police assistance. The live tracking link has been sent to your SMS. Repeating, passenger needs help. Disconnecting.
+            </Say>
+            <Hangup/>
+        </Response>"""
+
+        all_contacts = victim_contacts + [police_contact]
+        success_overall = False
+
+        for contact in all_contacts:
+            if not contact:
+                continue
+            
+            logger.info(f"Initiating TwiML voice call to {contact}...")
+            call_answered = False
+            
+            for attempt in range(1, 4):  # 3 retries
+                try:
+                    call = client.calls.create(
+                        twiml=twiml_script,
+                        to=contact,
+                        from_=sender
+                    )
+                    logger.info(f"Call {call.sid} dispatched to {contact} (Attempt {attempt}/3).")
+                    
+                    # Simulated polling for call status
+                    for _ in range(5):
+                        time.sleep(2)
+                        call_status = client.calls(call.sid).fetch().status
+                        if call_status in ['completed', 'in-progress']:
+                            logger.info(f"✅ Call to {contact} answered (Status: {call_status}).")
+                            call_answered = True
+                            success_overall = True
+                            break
+                        elif call_status in ['failed', 'no-answer', 'busy', 'canceled']:
+                            logger.warning(f"⚠️ Call to {contact} failed/unanswered (Status: {call_status}).")
+                            break
+                    
+                    if call_answered:
+                        break # Skip remaining retries for this contact
+                        
+                    logger.info(f"Retrying {contact} in 3 seconds...")
+                    time.sleep(3)
+                    
+                except Exception as exc:
+                    logger.error(f"Twilio API Voice Call error on attempt {attempt}: {exc}")
+                    time.sleep(3)
+                    
+            if not call_answered:
+                logger.error(f"❌ Failed to reach {contact} after 3 attempts. Moving to next contact.")
+
+        return success_overall
+
+    def send_mock_voice_call(self, victim_contacts: list, police_contact: str, tracking_link: str) -> bool:
+        """Simulates the AI Voice call for local testing without Twilio."""
+        divider = "=" * 70
+        all_contacts = victim_contacts + [police_contact]
+        print(f"\n{divider}\n🗣️ [MOCK TwiML VOICE GATEWAY] INITIATING AUTOMATED CALLS:\n{divider}")
+        for contact in all_contacts:
+            if not contact: continue
+            print(f"📞 Calling {contact}... ")
+            time.sleep(1)
+            print(f"🤖 Playing TTS: '🚨 Alert! Automated emergency call. Passenger requires police. Tracking: {tracking_link}. <Hangup>'")
+        print(f"{divider}\n")
         return True
 
     def dispatch(self, alert_type: str, details: str, telemetry: Dict[str, Any]) -> bool:

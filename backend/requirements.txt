@@ -26,3 +26,9 @@ firebase-admin>=6.2.0
 # Required for .env parsing and automated Telegram Bot API dispatch notifications
 python-dotenv>=1.0.0
 requests>=2.31.0
+
+# 5. Cloud Webhook Server & Notifications Fallback
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+twilio>=8.0.0

@@ -1,25 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transit Safety AI Command Center | UN SDG 5 Emergency Monitoring</title>
-    <meta name="description" content="Real-time AI-Powered IoT Edge & Cloud Command Dashboard for Public Transport Safety, featuring acoustic SOS detection, YOLOv8 crowd monitoring, and automated police georouting.">
-    
+    <meta name="description"
+        content="Real-time AI-Powered IoT Edge & Cloud Command Dashboard for Public Transport Safety, featuring acoustic SOS detection, YOLOv8 crowd monitoring, and automated police georouting.">
+
     <!-- Modern Typography: Google Fonts (Outfit & Inter) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap"
+        rel="stylesheet">
+
     <!-- FontAwesome Iconography CDN -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+
     <!-- Leaflet.js GIS Mapping CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
     <!-- Custom Premium Styling System -->
-    <link rel="stylesheet" href="./assets/css/style.css">
+    <link rel="stylesheet" href="./assets/css/style.css?v=7">
 </head>
+
 <body class="theme-dark">
     <!-- Automated SOS Strobe Override Layer -->
     <div id="strobe-overlay" class="strobe-hidden" aria-hidden="true"></div>
@@ -37,7 +45,7 @@
                     <p class="subtitle">AI/IoT Autonomous Public Transport Surveillance Network</p>
                 </div>
             </div>
-            
+
             <div class="header-badges">
                 <span class="badge sdg-badge" title="Aligned with United Nations Sustainable Development Goal 5">
                     <i class="fa-solid fa-person-dress"></i> UN SDG 5: Women Safety & Security
@@ -102,7 +110,8 @@
                         </div>
                     </div>
                     <div class="location-detail">
-                        <span class="detail-label"><i class="fa-solid fa-map-pin text-accent"></i> Current Landmark:</span>
+                        <span class="detail-label"><i class="fa-solid fa-map-pin text-accent"></i> Current
+                            Landmark:</span>
                         <strong id="telemetry-stop">Connaught Place Central Bus Terminus</strong>
                     </div>
                     <div class="coordinates-raw">
@@ -116,6 +125,15 @@
                         <h3><i class="fa-solid fa-camera-retro"></i> YOLOv8 Vision Density</h3>
                         <span id="vision-hardware-badge" class="badge-mini status-online">CAMERA ONLINE</span>
                     </div>
+
+                    <!-- Edge Client Camera Feed -->
+                    <div class="edge-camera-container">
+                        <video id="edge-camera-stream" autoplay playsinline muted></video>
+                        <div class="edge-camera-overlay">
+                            <span class="pulse-dot"></span> <span id="camera-status-text">INITIALIZING HARDWARE...</span>
+                        </div>
+                    </div>
+
                     <div class="pax-counter-display">
                         <div class="pax-circle" id="pax-indicator-ring">
                             <span class="pax-count" id="telemetry-pax">2</span>
@@ -123,7 +141,8 @@
                         </div>
                         <div class="pax-status-text">
                             <strong id="pax-status-title" class="text-safe">SAFE OPERATING LOAD</strong>
-                            <p id="pax-status-desc">Cabin occupancy within normal geometric ventilation margins (< 5 passengers).</p>
+                            <p id="pax-status-desc">Cabin occupancy within normal geometric ventilation margins (< 5
+                                    passengers).</p>
                         </div>
                     </div>
                     <!-- Capacity Bar -->
@@ -139,10 +158,17 @@
                         <span class="badge-mini status-online">MIC STREAM ACTIVE</span>
                     </div>
                     <div class="audio-waveform-visual">
-                        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
-                        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
+                        <div class="bar"></div>
                     </div>
-                    <p class="audio-instruction">Continuous real-time speech scanning active for keywords: <code class="kw-tag">"Bachao"</code> <code class="kw-tag">"Help"</code></p>
+                    <p class="audio-instruction">Continuous real-time speech scanning active for keywords: <code
+                            class="kw-tag">"Bachao"</code> <code class="kw-tag">"Help"</code></p>
                 </div>
 
                 <!-- Real-time Event Dispatch Feed -->
@@ -151,7 +177,8 @@
                     <div id="dispatch-logs-container" class="logs-viewport" role="log" aria-live="polite">
                         <div class="log-entry log-info">
                             <span class="log-time">[System Init]</span>
-                            <span class="log-msg">Command Center initialized. WebSocket subscribed to Firebase Cloud RTDB.</span>
+                            <span class="log-msg">Command Center initialized. WebSocket subscribed to Firebase Cloud
+                                RTDB.</span>
                         </div>
                     </div>
                 </div>
@@ -160,7 +187,8 @@
 
         <!-- Footer -->
         <footer class="command-footer">
-            <p>&copy; 2026 Engineering Minor Project Defense | Aligned with United Nations SDG Goal 5 (Target 5.2) | Built with Python, OpenCV, YOLOv8 & Vanilla JS</p>
+            <p>&copy; 2026 Engineering Minor Project Defense | Aligned with United Nations SDG Goal 5 (Target 5.2) |
+                Built with Python, OpenCV, YOLOv8 & Vanilla JS</p>
         </footer>
     </div>
 
@@ -172,10 +200,13 @@
             </div>
             <h2 id="modal-title" class="alarm-header">CRITICAL EMERGENCY DETECTED!</h2>
             <div class="alarm-details">
-                <p><strong>Incident Trigger:</strong> <span id="modal-incident-type">Acoustic Keyword ("Bachao") Spoken</span></p>
+                <p><strong>Incident Trigger:</strong> <span id="modal-incident-type">Acoustic Keyword ("Bachao")
+                        Spoken</span></p>
                 <p><strong>Affected Vehicle:</strong> BUS-104-DL01 (Route 412 Metro Link)</p>
                 <p><strong>Nearest Landmark:</strong> <span id="modal-location">Connaught Place Hub</span></p>
-                <p><strong>Automated Action:</strong> Vehicle halted. High-priority SMS/Telegram alerts transmitted. Automated rescue georouting calculated to nearest Police Station.</p>
+                <p><strong>Automated Action:</strong> Vehicle halted. High-priority SMS Emergency Alert transmitted to
+                    configured contact (<strong>+91 8318326641</strong>). Automated rescue georouting calculated to
+                    nearest Police Station.</p>
             </div>
             <div class="siren-indicator">
                 <i class="fa-solid fa-volume-high shake-icon"></i> High-Decibel Alarm Looping...
@@ -190,14 +221,16 @@
 
     <!-- Third-Party Library Bindings CDN -->
     <!-- Leaflet.js Mapping -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <!-- Firebase Realtime DB (V8 Compat via CDN for frictionless browser execution without Webpack/Vite build) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-    
+
     <!-- Custom Vanilla JavaScript Application Logic -->
-    <script src="./assets/js/alert-handler.js"></script>
-    <script src="./assets/js/map-controller.js"></script>
-    <script src="./assets/js/firebase-app.js"></script>
+    <script src="./assets/js/alert-handler.js?v=7"></script>
+    <script src="./assets/js/map-controller.js?v=7"></script>
+    <script src="./assets/js/firebase-app.js?v=7"></script>
 </body>
+
 </html>

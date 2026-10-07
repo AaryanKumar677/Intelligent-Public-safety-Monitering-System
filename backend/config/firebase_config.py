@@ -7,6 +7,8 @@ and telemetry timestamps during temporary cellular network dropouts, flushing au
 import time
 import logging
 import threading
+import socket
+import requests
 from collections import deque
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -76,28 +78,51 @@ class OfflineTelemetryBuffer:
 _offline_buffer = OfflineTelemetryBuffer()
 
 
+import json
+from pathlib import Path
+
 # =====================================================================
 # MOCK DATABASE REFERENCE (DEMONSTRATION FALLBACK)
 # =====================================================================
 class MockDatabaseReference:
     """Fallback Mock DB reference for offline grading evaluations or unconfigured JSON keys."""
+    
+    # Static dictionary to hold the unified state of the vehicle locally
+    local_state_cache = {}
+
     def __init__(self, path: str):
         self.path = path
-        self.last_val: Dict[str, Any] = {}
+
+    def _sync_to_local_file(self):
+        """Writes the unified vehicle state to a JSON file for the local web dashboard."""
+        try:
+            dashboard_dir = settings.BASE_DIR / "dashboard"
+            if dashboard_dir.exists():
+                telemetry_file = dashboard_dir / "telemetry.json"
+                with open(telemetry_file, "w") as f:
+                    json.dump(MockDatabaseReference.local_state_cache, f)
+        except Exception as e:
+            logger.error(f"Failed to sync local telemetry file: {e}")
 
     def set(self, value: Any) -> None:
-        self.last_val = value
+        MockDatabaseReference.local_state_cache[self.path] = value
+        self._sync_to_local_file()
         logger.info(f"[MOCK FIREBASE SET] -> Path: '{self.path}' | Payload: {value}")
 
     def update(self, value: Dict[str, Any]) -> None:
-        if isinstance(self.last_val, dict):
-            self.last_val.update(value)
+        if self.path not in MockDatabaseReference.local_state_cache:
+            MockDatabaseReference.local_state_cache[self.path] = {}
+        
+        if isinstance(MockDatabaseReference.local_state_cache[self.path], dict):
+            MockDatabaseReference.local_state_cache[self.path].update(value)
         else:
-            self.last_val = value
+            MockDatabaseReference.local_state_cache[self.path] = value
+            
+        self._sync_to_local_file()
         logger.info(f"[MOCK FIREBASE UPDATE] -> Path: '{self.path}' | Updates: {value}")
 
     def get(self) -> Any:
-        return self.last_val
+        return MockDatabaseReference.local_state_cache.get(self.path, {})
 
 
 # =====================================================================
@@ -158,12 +183,58 @@ def get_db_reference(path: str) -> Any:
         return MockDatabaseReference(path=path)
 
 
+def is_internet_available(host="8.8.8.8", port=53, timeout=2) -> bool:
+    """Checks if the edge node has active internet connection."""
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except socket.error:
+        return False
+
+def dispatch_sms_fallback(vehicle_id: str, payload: Dict[str, Any]):
+    """
+    Simulates hardware cellular transmission via GSM AT commands by directly calling
+    the Cloud Webhook Server API (mocking the SMS transition for demo purposes).
+    SMS Format: SOS | LAT: 26.8467 | LON: 80.9462 | ID: BUS-12
+    """
+    lat = payload.get("latitude", 0.0)
+    lng = payload.get("longitude", 0.0)
+    
+    sms_text = f"SOS | LAT: {lat} | LON: {lng} | ID: {vehicle_id}"
+    logger.warning(f"📡 [CELLULAR SMS FALLBACK DISPATCH] Outbound message: {sms_text}")
+    
+    # Send simulated SMS webhook directly to our dedicated decoupled cloud server
+    webhook_url = "http://127.0.0.1:8000/webhook/sms_fallback"
+    
+    try:
+        # Mocking the Twilio inbound SMS payload format
+        data = {
+            "Body": sms_text,
+            "From": settings.TWILIO_SENDER_PHONE if settings.TWILIO_SENDER_PHONE else "+1234567890"
+        }
+        res = requests.post(webhook_url, data=data, timeout=3.0)
+        if res.status_code == 200:
+            logger.info("✅ SMS Fallback successfully received by Cloud Server.")
+        else:
+            logger.error(f"❌ SMS Fallback Cloud Server error: {res.status_code}")
+    except Exception as e:
+        logger.error(f"❌ Cellular SMS Dispatch Simulation Failed (Is cloud_webhook_server.py running?): {e}")
+
+
 def update_vehicle_telemetry(vehicle_id: str, telemetry_payload: Dict[str, Any]) -> bool:
     """
     Pushes non-blocking vehicle state and routine sensor metrics to Firebase.
     Automatically enqueues payload to OfflineTelemetryBuffer on networking drops.
     """
     ref_path = f"vehicles/{vehicle_id}"
+    
+    if not is_internet_available():
+        logger.warning(f"⚠️ No internet detected for '{vehicle_id}'. Switching to SMS Fallback Mode!")
+        dispatch_sms_fallback(vehicle_id, telemetry_payload)
+        _offline_buffer.enqueue(path=ref_path, payload=telemetry_payload, is_priority=False)
+        return False
+
     ref = get_db_reference(ref_path)
     
     try:
@@ -174,6 +245,7 @@ def update_vehicle_telemetry(vehicle_id: str, telemetry_payload: Dict[str, Any])
         return True
     except Exception as err:
         logger.warning(f"⚠️ Network exception transmitting telemetry for '{vehicle_id}': {err}")
+        dispatch_sms_fallback(vehicle_id, telemetry_payload)
         # Buffer packet gracefully without dropping
         _offline_buffer.enqueue(path=ref_path, payload=telemetry_payload, is_priority=False)
         return False
@@ -185,6 +257,13 @@ def trigger_emergency_override(vehicle_id: str, emergency_data: Dict[str, Any]) 
     Enforces maximum retention priority inside offline buffer on connection loss.
     """
     ref_path = f"vehicles/{vehicle_id}/status"
+    
+    if not is_internet_available():
+        logger.warning(f"🚨 CRITICAL EMERGENCY OVERRIDE OFFLINE for '{vehicle_id}'. Forcing SMS Fallback!")
+        dispatch_sms_fallback(vehicle_id, emergency_data)
+        _offline_buffer.enqueue(path=ref_path, payload=emergency_data, is_priority=True)
+        return False
+
     ref = get_db_reference(ref_path)
     
     try:
@@ -195,6 +274,7 @@ def trigger_emergency_override(vehicle_id: str, emergency_data: Dict[str, Any]) 
         return True
     except Exception as err:
         logger.error(f"⚠️ Cloud transmission failure for critical alarm on '{vehicle_id}': {err}")
+        dispatch_sms_fallback(vehicle_id, emergency_data)
         # Enqueue high-priority emergency payload with guarantee of preservation
         _offline_buffer.enqueue(path=ref_path, payload=emergency_data, is_priority=True)
         return False

@@ -8,6 +8,8 @@ and enforcing instant navigational halts upon receiving Level-1 distress overrid
 import time
 import math
 import logging
+import threading
+import requests
 from typing import Dict, Any, List, Tuple
 
 logger = logging.getLogger("GPSSimulator")
@@ -34,6 +36,17 @@ class GPSTelemetrySimulator:
             {"name": "Barakhamba Road Commercial District", "coords": (28.6304, 77.2268)}
         ]
 
+        # Bypass IP-API and use precise requested location: Takrohi, Indira Nagar, Lucknow
+        real_lat = 26.8830
+        real_lon = 81.0020
+        real_city = "Takrohi, Indira Nagar, Lucknow"
+        
+        logger.info(f"✅ Real precise location configured: {real_city} ({real_lat}, {real_lon})")
+        
+        # Override the initial coordinates with real physical location
+        self.route_waypoints.insert(0, {"name": f"Physical Location ({real_city})", "coords": (real_lat, real_lon)})
+        self.route_waypoints.insert(1, {"name": f"Near {real_city} Hub", "coords": (real_lat + 0.005, real_lon + 0.005)})
+
         # Internal movement navigation tracking
         self.current_waypoint_idx = 0
         self.current_lat, self.current_lng = self.route_waypoints[0]["coords"]
@@ -44,7 +57,7 @@ class GPSTelemetrySimulator:
         self.emergency_halt_active = False
         
         self._compute_initial_heading()
-        logger.info("🛰️ GPS Telemetry Simulation Engine mounted on Central Delhi transit route.")
+        logger.info("🛰️ GPS Telemetry Simulation Engine mounted and ready.")
 
     def _compute_initial_heading(self) -> None:
         """Calculates compass heading azimuth vector toward active target waypoint."""
@@ -124,3 +137,34 @@ class GPSTelemetrySimulator:
             "emergency_halt_active": self.emergency_halt_active,
             "timestamp": int(time.time())
         }
+
+    def start_continuous_tracking(self, push_callback, interval: float = 3.0) -> None:
+        """
+        Starts a continuous high-frequency background polling loop.
+        Calls the provided push_callback with the current state every 'interval' seconds.
+        """
+        if hasattr(self, '_tracking_thread') and self._tracking_thread.is_alive():
+            logger.info("Continuous tracking already active.")
+            return
+
+        self._stop_tracking = False
+
+        def _tracking_loop():
+            logger.info(f"🚀 Started {interval}-second continuous live tracking loop.")
+            while not getattr(self, '_stop_tracking', False):
+                state = self.get_current_state()
+                try:
+                    push_callback(state)
+                except Exception as exc:
+                    logger.error(f"Error in continuous tracking callback: {exc}")
+                time.sleep(interval)
+
+        self._tracking_thread = threading.Thread(target=_tracking_loop, daemon=True)
+        self._tracking_thread.start()
+
+    def stop_continuous_tracking(self) -> None:
+        """Stops the continuous tracking loop."""
+        self._stop_tracking = True
+        if hasattr(self, '_tracking_thread'):
+            self._tracking_thread.join(timeout=1.0)
+        logger.info("🛑 Stopped continuous live tracking loop.")

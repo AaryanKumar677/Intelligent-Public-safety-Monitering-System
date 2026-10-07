@@ -4,7 +4,7 @@
  * Provides autonomous simulation loops and interactive evaluation demo button listeners.
  */
 
-# Firebase Realtime Database Client Configuration (Optional - replace with project URI when ready)
+// Firebase Realtime Database Client Configuration (Optional - replace with project URI when ready)
 const FIREBASE_CONFIG = {
     databaseURL: "https://transport-safety-ai-default-rtdb.firebaseio.com/"
 };
@@ -18,14 +18,14 @@ class CommandCenterApp {
         this.simulatedHeading = 124;
         this.currentLandmarkIndex = 0;
         
-        # Central Delhi Metro Transit Landmarks
+        // Central Delhi Metro Transit Landmarks
         this.transitStops = [
             "Connaught Place Central Hub", "Janpath Road Corridor", 
             "Parliament Street Police Precinct", "Central Secretariat Metro Gateway", 
             "India Gate Roundabout", "Tilak Marg Supreme Court Station"
         ];
 
-        # DOM UI Component Binding
+        // DOM UI Component Binding
         this.clockEl = document.getElementById('live-system-clock');
         this.cloudStatusBadge = document.getElementById('cloud-connection-status');
         this.paxCountEl = document.getElementById('telemetry-pax');
@@ -45,7 +45,7 @@ class CommandCenterApp {
     }
 
     _initSystem() {
-        # 1. Start live system precision clock ticker
+        // 1. Start live system precision clock ticker
         setInterval(() => {
             if (this.clockEl) {
                 const now = new Date();
@@ -53,7 +53,7 @@ class CommandCenterApp {
             }
         }, 1000);
 
-        # 2. Attempt Firebase RTDB WebSocket connection via CDN SDK
+        // 2. Attempt Firebase RTDB WebSocket connection via CDN SDK
         try {
             if (typeof firebase !== 'undefined' && firebase.initializeApp) {
                 firebase.initializeApp(FIREBASE_CONFIG);
@@ -69,13 +69,61 @@ class CommandCenterApp {
                 throw new Error("Firebase SDK script untracked.");
             }
         } catch (err) {
-            console.warn("Firebase credentials fallback active. Launching autonomous demo simulator for presentation evaluation.");
-            if (this.cloudStatusBadge) {
-                this.cloudStatusBadge.className = "badge status-connected";
-                this.cloudStatusBadge.innerHTML = `<span class="pulse-dot"></span> Evaluation Mode: LIVE SIMULATOR`;
+            console.warn("Firebase credentials fallback active.");
+        }
+
+        // --- ACADEMIC DEFENSE OVERRIDE ---
+        // Always start the local Python File-Sync Bridge to ensure 
+        // the python script can send live location directly to the browser.
+        this._startLocalPollingBridge();
+        if (this.cloudStatusBadge) {
+            this.cloudStatusBadge.className = "badge status-connected";
+            this.cloudStatusBadge.innerHTML = `<span class="pulse-dot"></span> Evaluation Mode: LOCAL PYTHON SYNC`;
+        }
+        appendLogEntry("WARN", "Running in Local Python File-Sync Bridge Mode. Backend updates will reflect live.");
+
+        // --- TRUE HARDWARE GPS TRACKING OVERRIDE ---
+        // Bypasses IP-API and securely uses the laptop's built-in Location Services for precise tracking
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition((position) => {
+                this.trueLat = position.coords.latitude;
+                this.trueLng = position.coords.longitude;
+                // If speed is available from hardware, we can also use it
+                if (position.coords.speed !== null) {
+                    this.trueSpeed = (position.coords.speed * 3.6).toFixed(1); // m/s to km/h
+                }
+            }, (error) => {
+                console.warn("Browser GPS permission denied or unavailable. Falling back to Python simulator.");
+            }, { enableHighAccuracy: true, maximumAge: 0 });
+        }
+        
+        // --- EDGE CAMERA ACCESS (PHONE REAR CAMERA) ---
+        this._initEdgeCamera();
+    }
+
+    async _initEdgeCamera() {
+        const videoElement = document.getElementById('edge-camera-stream');
+        const statusText = document.getElementById('camera-status-text');
+        if (!videoElement) return;
+
+        try {
+            // Request the physical rear camera of the phone (or default webcam on laptop)
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment', width: { ideal: 1280 } }
+            });
+            videoElement.srcObject = stream;
+            
+            if (statusText) {
+                statusText.textContent = "EDGE HARDWARE ACTIVE";
+                statusText.style.color = "#00D97E";
             }
-            this._startAutonomousSimulator();
-            appendLogEntry("WARN", "Running in local Academic Evaluation Simulation Mode. Interactive GUI triggers fully enabled.");
+            appendLogEntry("INFO", "Mobile Edge Camera securely mounted via HTML5 getUserMedia.");
+        } catch (err) {
+            console.warn("Edge Camera access denied. Needs HTTPS.", err);
+            if (statusText) {
+                statusText.textContent = "CAMERA BLOCKED (NEEDS HTTPS)";
+                statusText.style.color = "#FF3A2D";
+            }
         }
     }
 
@@ -95,14 +143,23 @@ class CommandCenterApp {
     }
 
     _renderTelemetry(data) {
-        # Render machine vision passenger density metrics
+        // Render machine vision passenger density metrics
         if (data.metrics && typeof data.metrics.passenger_count === 'number') {
             this.updatePassengerDensityUI(data.metrics.passenger_count, data.status ? data.status.crowd_alert : false);
         }
 
-        # Render GPS coordinates and speed telematics
+        // Render GPS coordinates and speed telematics
         if (data.location) {
             const loc = data.location;
+            
+            // Bypass Python Simulator with True Browser HTML5 GPS Hardware Location
+            if (this.trueLat && this.trueLng) {
+                loc.latitude = this.trueLat;
+                loc.longitude = this.trueLng;
+                loc.current_stop = "True Hardware GPS Track";
+                if (this.trueSpeed) loc.speed_kmh = this.trueSpeed;
+            }
+
             if (this.speedEl) this.speedEl.textContent = Number(loc.speed_kmh || 0).toFixed(1);
             if (this.headingEl) this.headingEl.textContent = `${loc.heading || 0}°`;
             if (this.stopEl) this.stopEl.textContent = loc.current_stop || "In Transit";
@@ -115,13 +172,18 @@ class CommandCenterApp {
             }
         }
 
-        # Intercept emergency level overrides
+        // Intercept emergency level overrides
         if (data.status && data.status.sos_triggered) {
             if (window.AlertHandlerInstance && typeof window.AlertHandlerInstance.triggerEmergencyOverride === 'function') {
                 window.AlertHandlerInstance.triggerEmergencyOverride(
                     `Acoustic Keyword ("${data.status.sos_keyword_matched || 'Bachao'}") Recognized`,
                     data.location ? data.location.current_stop : "Unknown Landmark"
                 );
+            }
+        } else {
+            // Free the alarm state so future emergencies can pop up again
+            if (window.AlertHandlerInstance && typeof window.AlertHandlerInstance.resetAlarmState === 'function') {
+                window.AlertHandlerInstance.resetAlarmState();
             }
         }
     }
@@ -133,7 +195,7 @@ class CommandCenterApp {
         this.simulatedPax = count;
         if (this.paxCountEl) this.paxCountEl.textContent = count;
         
-        # Calculate visual fill percentage (Capacity limit default: 5 passengers -> 100% warning)
+        // Calculate visual fill percentage (Capacity limit default: 5 passengers -> 100% warning)
         const pct = Math.min(100, Math.max(10, (count / 5) * 60));
 
         if (count > 5 || isOvercrowded) {
@@ -165,18 +227,25 @@ class CommandCenterApp {
         }
     }
 
-    _startAutonomousSimulator() {
-        # Periodically simulates smooth transit navigation along Central Delhi loop
-        setInterval(() => {
-            if (window.AlertHandlerInstance && window.AlertHandlerInstance.isAlarmActive) {
-                # During Level-1 emergency, freeze vehicle speed completely to 0.0 km/h
-                if (this.speedEl) this.speedEl.textContent = "0.0";
-                return;
+    _startLocalPollingBridge() {
+        // Periodically fetches the local telemetry.json written by the Python Backend
+        setInterval(async () => {
+            try {
+                // Fetch the file locally via the Python HTTP server (cache-busted, relative path so mobile works!)
+                const response = await fetch(`./telemetry.json?t=${new Date().getTime()}`);
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                // The Python mock dict stores paths as keys (e.g., 'vehicles/BUS-104-DL01')
+                const busData = data["vehicles/BUS-104-DL01"];
+                if (busData) {
+                    this._renderTelemetry(busData);
+                }
+            } catch (err) {
+                // Silent catch, telemetry.json might not be written yet if backend just started
             }
-
-            this.simulatedSpeed = roundNumber(32.0 + Math.random() * 8.0, 1);
-            if (this.speedEl) this.speedEl.textContent = this.simulatedSpeed.toFixed(1);
-        }, 3000);
+        }, 1000); // Poll every 1 second
     }
 
     _bindDemoControls() {
@@ -234,10 +303,10 @@ window.appendLogEntry = function(level = "INFO", message = "") {
     entry.className = `log-entry ${levelClass}`;
     entry.innerHTML = `<span class="log-time">[${nowStr}]</span> <span class="log-msg">${message}</span>`;
     
-    # Prepend newest entry directly to top of feed viewport
+    // Prepend newest entry directly to top of feed viewport
     container.insertBefore(entry, container.firstChild);
 
-    # Maintain sliding window of latest 25 logs to prevent memory bloat
+    // Maintain sliding window of latest 25 logs to prevent memory bloat
     if (container.children.length > 25) {
         container.removeChild(container.lastChild);
     }
@@ -247,7 +316,7 @@ function roundNumber(num, dec) {
     return Math.round(num * Math.pow(10, dec)) / Math.pow(10, dec);
 }
 
-# Instantiate application controller on DOM loaded
+// Instantiate application controller on DOM loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.AppInstance = new CommandCenterApp();
     console.log("🚀 Intelligent Transit Safety Command Center operational and bound to UI controls.");

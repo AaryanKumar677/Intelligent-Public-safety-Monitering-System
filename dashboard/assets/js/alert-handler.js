@@ -8,6 +8,7 @@
 class EmergencyAlertController {
     constructor() {
         this.isAlarmActive = false;
+        this.isMuted = false; // Prevents alarm from re-triggering constantly after dispatch acknowledges it
         this.audioCtx = null;
         
         // EBS Dual-oscillator synth nodes
@@ -36,9 +37,18 @@ class EmergencyAlertController {
         if (!this.audioCtx) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.audioCtx = new AudioContext();
+            
+            // Bypass Browser Autoplay Policy: Resume audio context on first user interaction
+            document.addEventListener('click', () => {
+                if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume();
+                }
+            }, { once: false });
         }
+        
         if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+            // Attempt to resume it now, though it might be blocked if not triggered by user interaction
+            this.audioCtx.resume().catch(e => console.warn("Autoplay blocked. User needs to click on the page."));
         }
     }
 
@@ -89,6 +99,15 @@ class EmergencyAlertController {
             }, 450);
 
             console.log("🔊 Government EBS Acoustic Attention Synth activated (853 Hz + 960 Hz dual-chord loop).");
+
+            // Aggressive continuous hardware vibration for mobile devices (Simulating WEA Cell Broadcast)
+            if ("vibrate" in navigator) {
+                navigator.vibrate([800, 200, 800, 200, 800, 200, 800]); // Initial pattern
+                this.vibrationInterval = setInterval(() => {
+                    navigator.vibrate([800, 200, 800, 200, 800, 200, 800]);
+                }, 4000);
+            }
+
         } catch (err) {
             console.warn("Browser audio autoplay policy blocked automatic audio synth initiation:", err);
         }
@@ -98,6 +117,13 @@ class EmergencyAlertController {
         if (this.sirenModulationInterval) {
             clearInterval(this.sirenModulationInterval);
             this.sirenModulationInterval = null;
+        }
+        if (this.vibrationInterval) {
+            clearInterval(this.vibrationInterval);
+            this.vibrationInterval = null;
+        }
+        if ("vibrate" in navigator) {
+            navigator.vibrate(0); // Instantly kill active vibration engine
         }
         [this.oscillatorEBS1, this.oscillatorEBS2].forEach(osc => {
             if (osc) {
@@ -117,7 +143,7 @@ class EmergencyAlertController {
      * Enforces strict UI locking until dispatcher acknowledgment.
      */
     triggerEmergencyOverride(triggerReason = "Acoustic Keyword ('Bachao') Vocalized", locationText = "Connaught Place Hub") {
-        if (this.isAlarmActive) return;
+        if (this.isAlarmActive || this.isMuted) return;
         this.isAlarmActive = true;
 
         console.warn(`🚨 GOVERNMENT EBS EMERGENCY OVERRIDE ENGAGED: ${triggerReason} around ${locationText}`);
@@ -158,6 +184,7 @@ class EmergencyAlertController {
     acknowledgeAlarm() {
         console.log("🛡️ Dispatcher acknowledged alarm. Committing containment & reaction protocol.");
         this.isAlarmActive = false;
+        this.isMuted = true; // Mute further popups until backend explicitly resets SOS status
 
         // Silence EBS acoustic synthesizer & cancel visual strobe animation
         this.stopEBSSirenLoop();
@@ -177,12 +204,22 @@ class EmergencyAlertController {
             window.appendLogEntry("INFO", "Dispatcher acknowledged Level-1 distress alert. Quick Reaction Squad deployed to calculated target coordinates.");
         }
 
-        # Clear emergency routing line from GIS map viewport
+        // Clear emergency routing line from GIS map viewport
         if (window.MapControllerInstance && typeof window.MapControllerInstance.clearEmergencyRouting === 'function') {
             window.MapControllerInstance.clearEmergencyRouting();
         }
     }
+
+    /**
+     * Called when the backend stops sending the SOS flag, freeing the system for future alarms.
+     */
+    resetAlarmState() {
+        this.isMuted = false;
+        this.isAlarmActive = false;
+    }
 }
 
-# Global Singleton Instance
-window.AlertHandlerInstance = new EmergencyAlertController();
+// Global Singleton Instance initialization on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.AlertHandlerInstance = new EmergencyAlertController();
+});

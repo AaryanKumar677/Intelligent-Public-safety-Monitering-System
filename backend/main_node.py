@@ -21,6 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backend.config import settings, firebase_config
 from backend.sensors import AudioSOSListener, YOLOCrowdMonitor, GPSTelemetrySimulator
 from backend.services import dispatch_emergency_notification
+from backend.services.notification_service import _dispatcher
 
 # Configure formatting for system execution loggers
 logging.basicConfig(
@@ -35,7 +36,7 @@ class IntelligentTransitNode:
     Master supervisory controller representing an active public transit vehicle edge IoT node.
     """
 
-    def __init__(self, enable_preview_window: bool = True):
+    def __init__(self, enable_preview_window: bool = False):
         self.enable_preview = enable_preview_window
         self.vehicle_id = settings.VEHICLE_ID
         self.is_running = False
@@ -83,6 +84,33 @@ class IntelligentTransitNode:
             details=f"Passenger vocalized emergency distress keyword: '{matched_keyword.upper()}'. Cabin in danger.",
             telemetry=telemetry
         )
+
+        # Trigger AI Voice Calls with 3-time retry
+        maps_link = f"https://www.google.com/maps?q={telemetry.get('latitude')},{telemetry.get('longitude')}"
+        _dispatcher.trigger_emergency_voice_call(
+            victim_contacts=[settings.TWILIO_RECIPIENT_PHONE], 
+            police_contact="+1911", # Demo police number
+            tracking_link=maps_link
+        )
+
+        # Start continuous 3-second live GPS polling to Firebase (or SMS Fallback if offline)
+        def push_gps_payload(state):
+            payload = {
+                "vehicle_id": self.vehicle_id,
+                "location": {
+                    "latitude": state["latitude"],
+                    "longitude": state["longitude"],
+                    "speed_kmh": state["speed_kmh"],
+                    "heading": state["heading_degrees"],
+                    "current_stop": state["current_stop_nearby"]
+                },
+                "status": {
+                    "sos_triggered": True
+                }
+            }
+            firebase_config.update_vehicle_telemetry(self.vehicle_id, payload)
+            
+        self.gps_engine.start_continuous_tracking(push_callback=push_gps_payload, interval=3.0)
 
     def _on_vision_anomaly_detected(self, person_count: int, overcrowded: bool) -> None:
         """Callback invoked when YOLOv8 crowd counter crosses established geometry limits."""
@@ -144,6 +172,7 @@ class IntelligentTransitNode:
         logger.info("🛡️ Clearing emergency SOS overrides and resuming normal vehicle navigation...")
         self.sos_active = False
         self.gps_engine.set_emergency_halt(False)
+        self.gps_engine.stop_continuous_tracking()
         
         clear_payload = {
             "sos_triggered": False,
@@ -179,6 +208,8 @@ class IntelligentTransitNode:
 
         # Execute primary non-blocking telemetry and optical surveillance processing loop
         try:
+            last_telemetry_sync = 0.0
+
             while self.is_running:
                 loop_start = time.time()
 
@@ -186,40 +217,41 @@ class IntelligentTransitNode:
                 geo_telemetry = self.gps_engine.step()
                 self.last_known_telemetry = geo_telemetry
 
-                # Step 2: Evaluate live webcam frame via YOLOv8 engine
+                # Step 2: Evaluate live webcam frame via YOLOv8 engine (Running without 2s sleep for smooth video)
                 vision_metrics = self.vision_engine.process_single_step(show_preview_window=self.enable_preview)
 
-                # Step 3: Compile integrated state telemetry packet
-                master_state_payload = {
-                    "vehicle_id": self.vehicle_id,
-                    "route_name": settings.VEHICLE_ROUTE_NAME,
-                    "location": {
-                        "latitude": geo_telemetry["latitude"],
-                        "longitude": geo_telemetry["longitude"],
-                        "speed_kmh": geo_telemetry["speed_kmh"],
-                        "heading": geo_telemetry["heading_degrees"],
-                        "current_stop": geo_telemetry["current_stop_nearby"]
-                    },
-                    "metrics": {
-                        "passenger_count": vision_metrics["passenger_count"],
-                        "hardware_camera_online": vision_metrics["hardware_online"],
-                        "last_heartbeat": geo_telemetry["timestamp"]
-                    },
-                    "status": {
-                        "sos_triggered": self.sos_active,
-                        "crowd_alert": self.crowd_alert_active,
-                        "emergency_halt": geo_telemetry["emergency_halt_active"]
+                # Step 3 & 4: Compile and Transmit telemetry only every TELEMETRY_INTERVAL_SEC (default 2s)
+                if loop_start - last_telemetry_sync >= settings.TELEMETRY_INTERVAL_SEC:
+                    master_state_payload = {
+                        "vehicle_id": self.vehicle_id,
+                        "route_name": settings.VEHICLE_ROUTE_NAME,
+                        "location": {
+                            "latitude": geo_telemetry["latitude"],
+                            "longitude": geo_telemetry["longitude"],
+                            "speed_kmh": geo_telemetry["speed_kmh"],
+                            "heading": geo_telemetry["heading_degrees"],
+                            "current_stop": geo_telemetry["current_stop_nearby"]
+                        },
+                        "metrics": {
+                            "passenger_count": vision_metrics["passenger_count"],
+                            "hardware_camera_online": vision_metrics["hardware_online"],
+                            "last_heartbeat": geo_telemetry["timestamp"]
+                        },
+                        "status": {
+                            "sos_triggered": self.sos_active,
+                            "crowd_alert": self.crowd_alert_active,
+                            "emergency_halt": geo_telemetry["emergency_halt_active"]
+                        }
                     }
-                }
 
-                # Step 4: Transmit unified telemetry to Firebase Cloud
-                firebase_config.update_vehicle_telemetry(self.vehicle_id, master_state_payload)
-                logger.debug(f"📡 Telemetry heartbeat synced -> Stop: '{geo_telemetry['current_stop_nearby']}' | Pax: {vision_metrics['passenger_count']}")
+                    # Transmit unified telemetry to Firebase Cloud
+                    firebase_config.update_vehicle_telemetry(self.vehicle_id, master_state_payload)
+                    logger.debug(f"📡 Telemetry heartbeat synced -> Stop: '{geo_telemetry['current_stop_nearby']}' | Pax: {vision_metrics['passenger_count']}")
+                    
+                    last_telemetry_sync = loop_start
 
-                # Throttle execution interval to configured frequency (default ~2s)
-                elapsed = time.time() - loop_start
-                sleep_duration = max(0.1, settings.TELEMETRY_INTERVAL_SEC - elapsed)
-                time.sleep(sleep_duration)
+                # Sleep slightly to yield thread and prevent 100% CPU usage (~30 FPS target)
+                time.sleep(0.03)
 
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt intercepted in primary orchestrator loop.")
@@ -238,12 +270,12 @@ class IntelligentTransitNode:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Intelligent Public Transport Safety Monitoring System Node")
-    parser.add_argument("--headless", action="store_true", help="Disable OpenCV video surveillance UI window")
+    parser.add_argument("--show-video", action="store_true", help="Enable OpenCV video surveillance UI window")
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_arguments()
-    node_runtime = IntelligentTransitNode(enable_preview_window=not args.headless)
+    node_runtime = IntelligentTransitNode(enable_preview_window=args.show_video)
     
     def signal_handler(sig, frame):
         logger.info("System SIGINT received. Stopping...")

@@ -59,8 +59,8 @@ AUDIO_SOS_KEYWORDS = {
     "bachao bachao"
 }
 
-# Confirmed Hardware Index 0 (Primary Integrated Laptop Microphone)
-AUDIO_DEVICE_INDEX = int(os.getenv("AUDIO_DEVICE_INDEX", "0"))
+# Confirmed Hardware Index: 1 (Microphone Array - Realtek)
+AUDIO_DEVICE_INDEX = 1
 AUDIO_ENERGY_THRESHOLD = int(os.getenv("AUDIO_ENERGY_THRESHOLD", "300"))
 AUDIO_LISTEN_TIMEOUT_SEC = int(os.getenv("AUDIO_LISTEN_TIMEOUT_SEC", "3"))
 AUDIO_DEBOUNCE_SEC = float(os.getenv("AUDIO_DEBOUNCE_SEC", "8.0"))
@@ -90,4 +90,4 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_SENDER_PHONE = os.getenv("TWILIO_SENDER_PHONE", "")
-TWILIO_RECIPIENT_PHONE = os.getenv("TWILIO_RECIPIENT_PHONE", "")
+TWILIO_RECIPIENT_PHONE = os.getenv("TWILIO_RECIPIENT_PHONE", "+918318326641")
