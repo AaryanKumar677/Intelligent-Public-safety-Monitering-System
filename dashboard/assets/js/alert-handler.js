@@ -1,21 +1,18 @@
 /**
- * Alert Handler & Web Audio API Government EBS Siren Synthesizer
- * Generates an authentic dual-tone Government Emergency Broadcast System (EBS / EAS) attention signal
- * combining simultaneous 853 Hz and 960 Hz acoustic chords with alternating transit alarm modulation.
- * Enforces continuous red background strobe UI overrides until manual dispatcher acknowledgment.
+ * Alert Handler & Web Audio API Emergency Siren Synthesizer
+ * Generates a clean, authentic vehicle emergency wail siren via Web Audio API.
+ * Guarantees zero audio leakage, strict single-instance playback, and instant silence on acknowledgment.
  */
 
 class EmergencyAlertController {
     constructor() {
         this.isAlarmActive = false;
-        this.isMuted = false; // Prevents alarm from re-triggering constantly after dispatch acknowledges it
+        this.isMuted = false;
         this.audioCtx = null;
-        
-        // EBS Dual-oscillator synth nodes
-        this.oscillatorEBS1 = null; // 853 Hz EAS Chord
-        this.oscillatorEBS2 = null; // 960 Hz EAS Chord
+        this.oscillator = null;
         this.gainNode = null;
-        this.sirenModulationInterval = null;
+        this.sirenSweepInterval = null;
+        this.vibrationInterval = null;
         
         // DOM Elements
         this.strobeOverlay = document.getElementById('strobe-overlay');
@@ -38,122 +35,136 @@ class EmergencyAlertController {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.audioCtx = new AudioContext();
             
-            // Bypass Browser Autoplay Policy: Resume audio context on first user interaction
+            // Resume audio context on user interaction
             document.addEventListener('click', () => {
-                if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                if (this.audioCtx && this.audioCtx.state === 'suspended' && this.isAlarmActive) {
                     this.audioCtx.resume();
                 }
             }, { once: false });
         }
         
-        if (this.audioCtx.state === 'suspended') {
-            // Attempt to resume it now, though it might be blocked if not triggered by user interaction
-            this.audioCtx.resume().catch(e => console.warn("Autoplay blocked. User needs to click on the page."));
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume().catch(() => {});
         }
     }
 
     /**
-     * Synthesizes official Government Emergency Broadcast System (EBS) dual-frequency harmonic
-     * ATTENTION SIGNAL (853 Hz + 960 Hz simultaneous dissonant chord) via Web Audio API.
-     * Operates without external .mp3 file dependencies or network downloads.
+     * Starts a clean, single-channel vehicle emergency wail siren.
+     * Sweeps smoothly between 650 Hz and 960 Hz without clashing dual tones.
      */
     startEBSSirenLoop() {
         try {
+            // 1. Terminate any previous audio nodes first (prevents overlapping ghost sirens)
+            this.stopEBSSirenLoop();
+
             this._initAudioContext();
+            if (!this.audioCtx) return;
             
-            // Create master gain controller (volume throttled to 0.22 to prevent hardware clipping)
+            // 2. Create master gain controller
             this.gainNode = this.audioCtx.createGain();
-            this.gainNode.gain.setValueAtTime(0.22, this.audioCtx.currentTime);
+            this.gainNode.gain.setValueAtTime(0.20, this.audioCtx.currentTime);
             this.gainNode.connect(this.audioCtx.destination);
 
-            // Oscillator 1: Official EAS low harmonic tone (853 Hz)
-            this.oscillatorEBS1 = this.audioCtx.createOscillator();
-            this.oscillatorEBS1.type = 'sawtooth';
-            this.oscillatorEBS1.frequency.setValueAtTime(853, this.audioCtx.currentTime);
-            this.oscillatorEBS1.connect(this.gainNode);
+            // 3. Single smooth oscillator (triangle wave produces an authentic police/ambulance wail)
+            this.oscillator = this.audioCtx.createOscillator();
+            this.oscillator.type = 'triangle';
+            this.oscillator.frequency.setValueAtTime(680, this.audioCtx.currentTime);
+            this.oscillator.connect(this.gainNode);
+            this.oscillator.start();
 
-            // Oscillator 2: Official EAS high harmonic tone (960 Hz)
-            this.oscillatorEBS2 = this.audioCtx.createOscillator();
-            this.oscillatorEBS2.type = 'sawtooth';
-            this.oscillatorEBS2.frequency.setValueAtTime(960, this.audioCtx.currentTime);
-            this.oscillatorEBS2.connect(this.gainNode);
-
-            this.oscillatorEBS1.start();
-            this.oscillatorEBS2.start();
-
-            // Periodic pitch modulation to alternate between Government EBS harmonic and emergency transit reaction wail
-            let isEBSTone = true;
-            this.sirenModulationInterval = setInterval(() => {
-                if (!this.oscillatorEBS1 || !this.oscillatorEBS2 || !this.audioCtx) return;
+            // 4. Smooth frequency sweep (alternating high and low pitch)
+            let pitchUp = true;
+            this.sirenSweepInterval = setInterval(() => {
+                if (!this.oscillator || !this.audioCtx || this.audioCtx.state !== 'running') return;
                 
-                if (isEBSTone) {
-                    // Alternate to European/Transit Emergency Wail (680 Hz & 920 Hz split)
-                    this.oscillatorEBS1.frequency.setTargetAtTime(680, this.audioCtx.currentTime, 0.04);
-                    this.oscillatorEBS2.frequency.setTargetAtTime(920, this.audioCtx.currentTime, 0.04);
-                } else {
-                    // Revert to Government EBS Attention Signal (853 Hz & 960 Hz chord)
-                    this.oscillatorEBS1.frequency.setTargetAtTime(853, this.audioCtx.currentTime, 0.04);
-                    this.oscillatorEBS2.frequency.setTargetAtTime(960, this.audioCtx.currentTime, 0.04);
+                const targetFreq = pitchUp ? 960 : 640;
+                try {
+                    this.oscillator.frequency.exponentialRampToValueAtTime(targetFreq, this.audioCtx.currentTime + 0.45);
+                } catch (e) {
+                    this.oscillator.frequency.setValueAtTime(targetFreq, this.audioCtx.currentTime);
                 }
-                isEBSTone = !isEBSTone;
-            }, 450);
+                pitchUp = !pitchUp;
+            }, 500);
 
-            console.log("🔊 Government EBS Acoustic Attention Synth activated (853 Hz + 960 Hz dual-chord loop).");
+            console.log("🔊 Emergency Acoustic Siren Activated (Clean Single-Tone Sweep).");
 
-            // Aggressive continuous hardware vibration for mobile devices (Simulating WEA Cell Broadcast)
+            // Hardware vibration for mobile devices
             if ("vibrate" in navigator) {
-                navigator.vibrate([800, 200, 800, 200, 800, 200, 800]); // Initial pattern
+                navigator.vibrate([600, 200, 600, 200, 600]);
                 this.vibrationInterval = setInterval(() => {
-                    navigator.vibrate([800, 200, 800, 200, 800, 200, 800]);
-                }, 4000);
+                    if (this.isAlarmActive && "vibrate" in navigator) {
+                        navigator.vibrate([600, 200, 600, 200, 600]);
+                    }
+                }, 3500);
             }
 
         } catch (err) {
-            console.warn("Browser audio autoplay policy blocked automatic audio synth initiation:", err);
+            console.warn("Browser audio autoplay blocked automatic siren:", err);
         }
     }
 
+    /**
+     * Fully stops and completely silences all oscillators and audio context immediately.
+     */
     stopEBSSirenLoop() {
-        if (this.sirenModulationInterval) {
-            clearInterval(this.sirenModulationInterval);
-            this.sirenModulationInterval = null;
+        // Clear sweep timers
+        if (this.sirenSweepInterval) {
+            clearInterval(this.sirenSweepInterval);
+            this.sirenSweepInterval = null;
         }
         if (this.vibrationInterval) {
             clearInterval(this.vibrationInterval);
             this.vibrationInterval = null;
         }
         if ("vibrate" in navigator) {
-            navigator.vibrate(0); // Instantly kill active vibration engine
+            navigator.vibrate(0);
         }
-        [this.oscillatorEBS1, this.oscillatorEBS2].forEach(osc => {
-            if (osc) {
-                try {
-                    osc.stop();
-                    osc.disconnect();
-                } catch (e) {}
-            }
-        });
-        this.oscillatorEBS1 = null;
-        this.oscillatorEBS2 = null;
-        console.log("🔇 Government EBS acoustic alarm loop silenced by dispatcher mitigation.");
+
+        // Instantly mute and disconnect gain node
+        if (this.gainNode && this.audioCtx) {
+            try {
+                this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+                this.gainNode.disconnect();
+            } catch (e) {}
+            this.gainNode = null;
+        }
+
+        // Stop and disconnect oscillator
+        if (this.oscillator) {
+            try {
+                this.oscillator.stop();
+                this.oscillator.disconnect();
+            } catch (e) {}
+            this.oscillator = null;
+        }
+
+        // Suspend the AudioContext completely to ensure ZERO audio hardware leakage
+        if (this.audioCtx && this.audioCtx.state === 'running') {
+            try {
+                this.audioCtx.suspend();
+            } catch (e) {}
+        }
+
+        console.log("🔇 Emergency siren completely silenced.");
     }
 
     /**
      * Triggers Level-1 Critical Emergency override sequence across UI and audio speakers.
-     * Enforces strict UI locking until dispatcher acknowledgment.
      */
     triggerEmergencyOverride(triggerReason = "Acoustic Keyword ('Bachao') Vocalized", locationText = "Connaught Place Hub") {
-        if (this.isAlarmActive || this.isMuted) return;
+        // Prevent duplicate trigger if already active
+        if (this.isAlarmActive) return;
         this.isAlarmActive = true;
+        this.isMuted = false;
 
-        console.warn(`🚨 GOVERNMENT EBS EMERGENCY OVERRIDE ENGAGED: ${triggerReason} around ${locationText}`);
+        console.warn(`🚨 EMERGENCY OVERRIDE ENGAGED: ${triggerReason} around ${locationText}`);
 
         // 1. Unhide flashing red background strobe overlay
         if (this.strobeOverlay) {
             this.strobeOverlay.classList.remove('strobe-hidden');
         }
 
-        // 2. Start continuous synthesized EBS acoustic siren loop
+        // 2. Start single clean siren loop
         this.startEBSSirenLoop();
 
         // 3. Populate and display Critical Override Modal Dialog
@@ -167,12 +178,12 @@ class EmergencyAlertController {
             }
         }
 
-        // 4. Instruct GIS mapping engine to execute dynamic nearest-station Euclidean calculation & plotting
+        // 4. Instruct GIS mapping engine to plot dynamic nearest-station rescue line
         if (window.MapControllerInstance && typeof window.MapControllerInstance.drawDynamicEmergencyRouting === 'function') {
             window.MapControllerInstance.drawDynamicEmergencyRouting();
         }
 
-        // 5. Append critical log bulletin to real-time feed
+        // 5. Append critical log bulletin
         if (window.appendLogEntry) {
             window.appendLogEntry("CRITICAL", `EMERGENCY OVERRIDE ENGAGED: ${triggerReason}. Automated rescue georouting active.`);
         }
@@ -184,14 +195,17 @@ class EmergencyAlertController {
     acknowledgeAlarm() {
         console.log("🛡️ Dispatcher acknowledged alarm. Committing containment & reaction protocol.");
         this.isAlarmActive = false;
-        this.isMuted = true; // Mute further popups until backend explicitly resets SOS status
+        this.isMuted = true;
 
-        // Silence EBS acoustic synthesizer & cancel visual strobe animation
+        // Immediately kill and silence all audio
         this.stopEBSSirenLoop();
+
+        // Hide strobe overlay
         if (this.strobeOverlay) {
             this.strobeOverlay.classList.add('strobe-hidden');
         }
         
+        // Close modal
         if (this.modal) {
             try {
                 this.modal.close();
@@ -201,21 +215,23 @@ class EmergencyAlertController {
         }
 
         if (window.appendLogEntry) {
-            window.appendLogEntry("INFO", "Dispatcher acknowledged Level-1 distress alert. Quick Reaction Squad deployed to calculated target coordinates.");
+            window.appendLogEntry("INFO", "Dispatcher acknowledged Level-1 distress alert. Quick Reaction Squad deployed.");
         }
 
-        // Clear emergency routing line from GIS map viewport
+        // Clear emergency routing line from GIS map
         if (window.MapControllerInstance && typeof window.MapControllerInstance.clearEmergencyRouting === 'function') {
             window.MapControllerInstance.clearEmergencyRouting();
         }
     }
 
     /**
-     * Called when the backend stops sending the SOS flag, freeing the system for future alarms.
+     * Called when system state is normal.
+     * MUST NOT deactivate alarm if it is actively sounding on screen.
      */
     resetAlarmState() {
-        this.isMuted = false;
-        this.isAlarmActive = false;
+        if (!this.isAlarmActive) {
+            this.isMuted = false;
+        }
     }
 }
 

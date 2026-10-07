@@ -178,9 +178,9 @@ class CommandCenterApp {
                         if (voiceLiveTranscript) {
                             voiceLiveTranscript.innerHTML = `🚨 MATCHED: <strong style="color:#FF3A2D;">"${matchedWord.toUpperCase()}"</strong>!`;
                         }
-                        appendLogEntry("CRITICAL", `🎙️ Voice SOS Triggered! Keyword matched: "${matchedWord}" in transcript "${transcript}".`);
-                        if (this.speedEl) this.speedEl.textContent = "0.0";
-                        if (window.AlertHandlerInstance) {
+                        if (window.AlertHandlerInstance && !window.AlertHandlerInstance.isAlarmActive) {
+                            appendLogEntry("CRITICAL", `🎙️ Voice SOS Triggered! Keyword matched: "${matchedWord}" in transcript "${transcript}".`);
+                            if (this.speedEl) this.speedEl.textContent = "0.0";
                             window.AlertHandlerInstance.triggerEmergencyOverride(
                                 `Acoustic Keyword ("${matchedWord}") Recognized`,
                                 this.stopEl ? this.stopEl.textContent : "Active Transit Corridor"
